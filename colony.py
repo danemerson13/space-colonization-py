@@ -337,38 +337,121 @@ class Colony:
             node.setPressure(x[j])
             j += 1
 
-    def countGenerations(self, branch, threshold):
-        count = 0
-        root = self.branchList[0]
-        curBranch = branch
-        while curBranch != root:
-            if curBranch.getRadius() <= np.sqrt(threshold*curBranch.getParent().getRadius()**2):
-                count += 1
-            curBranch = curBranch.getParent()
-        return count
-
-    def assignGenerations(self):
+    def findMatchingNode(self, node):
+        eps = 1e-6
         for branch in self.branchList:
-            gen = self.countGenerations(branch, 1)
-            branch.setGeneration(gen)
+            if branch.getDistal().isTerminal():
+                if np.linalg.norm(node.getLocation() - branch.getDistal().getLocation()) < eps:
+                    return branch.getDistal()
 
-    def assignGenerationsThreshold(self, threshold):
-        for branch in self.branchList:
-            gen = self.countGenerations(branch, threshold)
-            branch.setGeneration(gen)
+    def findMatchingBranch(self, branch):
+        eps = 1e-6
+        for bran in self.branchList:
+            if bran.getDistal().isTerminal():
+                if np.linalg.norm(bran.getDistal().getLocation() - branch.getDistal().getLocation()) < eps:
+                    return bran
 
-    def computeGeometryStatistics(self):
-        print('D = %d, dk = %d, di = %d' % ( self.D, self.dk, self.di))
-        # First figure out how many generations there are
-        gens = list()
+    def replaceTerminalNodes(self, inlet):
+        eps = 1e-6
         for branch in self.branchList:
-            gens.append(branch.getGeneration())
-        gens = list(set(gens)) # Make the list unique
-        for gen in gens:
-            count = 0; radius = 0.; length = 0.
-            for branch in self.branchList:
-                if branch.getGeneration() == gen:
-                    count += 1
-                    radius += branch.getRadius()
-                    length += self.branchLength(branch)
-            print('Generation #%d | Avg Diam = %.3f | Avg Length = %.3f' % (gen, 2*radius/count, length/count))
+            if branch.getDistal().isTerminal():
+                for node in inlet.nodeList:
+                    if np.linalg.norm(branch.getDistal().getLocation() - node.getLocation()) < eps:
+                        branch.setDistal(node)
+                        
+def solveResistanceNetwork2x(inlet, outlet, Pin, Pout):
+        nBranchIn = len(inlet.branchList); nBranchOut = len(outlet.branchList)
+        nNode = 0
+        nBC = 0
+        VNodeList = list()
+        for node in inlet.nodeList:
+            if node.isRoot():
+                node.setPressure(Pin)
+                VNodeList.append(node)
+                nNode += 1
+                nBC += 1
+            elif node.isFurcation() or node.isTerminal():
+                VNodeList.append(node)
+                nNode += 1
+        for node in outlet.nodeList:
+            if node.isRoot():
+                node.setPressure(Pout)
+                VNodeList.append(node)
+                nNode += 1
+                nBC += 1
+            elif node.isFurcation():
+                VNodeList.append(node)
+                nNode += 1
+
+        nBranch = nBranchIn + nBranchOut
+        
+        A = np.zeros((nBranch+nNode, nBranch+nNode))
+        b = np.zeros(nBranch+nNode)
+        # x = [branchList, nodeList]
+
+        # (1) Branch eqns: vdist - vprox - IR = 0 (Ohms law)
+        for i, branch in enumerate(inlet.branchList):
+            A[i,i] = -branch.getResistance()
+            A[i, VNodeList.index(branch.getProximal()) + nBranch] = 1
+            A[i, VNodeList.index(branch.getDistal()) + nBranch] = -1
+
+        j = nBranchIn
+        for branch in outlet.branchList:
+            A[j,j] = -branch.getResistance()
+            # Reverse signs for outlet tree since direction is reversed
+            A[j, VNodeList.index(branch.getProximal()) + nBranch] = -1
+            if branch.isTerminal():
+                node = inlet.findMatchingNode(branch.getDistal())
+                A[j, VNodeList.index(node) + nBranch] = 1
+            else:
+                A[j, VNodeList.index(branch.getDistal()) + nBranch] = 1
+            j += 1
+
+        # (2) Nodal eqns: sum(Iin) - sum(Iout) = 0 (Kirchoffs current law)
+        k = nBranch
+        for branch in inlet.branchList:
+            # Normal branches
+            if not branch.isTerminal():
+                A[k, inlet.branchList.index(branch)] = 1
+                for child in branch.getChildren():
+                    A[k, inlet.branchList.index(child)] = -1
+                k += 1
+            # Terminal branches
+            if branch.isTerminal():
+                # Find branch in outlet that matches distal node
+                A[k, inlet.branchList.index(branch)] = 1
+                bran = outlet.findMatchingBranch(branch)
+                A[k, outlet.branchList.index(bran) + nBranchIn] = -1
+                k += 1
+        for branch in outlet.branchList:
+            if not branch.isTerminal():
+                # Reverse signs for outlet tree since direction is reversed
+                A[k, outlet.branchList.index(branch) + nBranchIn] = -1
+                for child in branch.getChildren():
+                    A[k, outlet.branchList.index(child) + nBranchIn] = 1
+                k += 1
+
+        # (3) BC eqns
+        l = len(A) - nBC
+        for node in VNodeList:
+            if node.isRoot():
+                A[l, VNodeList.index(node) + nBranch] = 1
+                b[l] = node.getPressure()
+                l += 1
+
+        # Solve Ax = b
+        x = np.linalg.solve(A, b)
+
+        # Assign computed I and V values
+        for i, branch in enumerate(inlet.branchList):
+            branch.setFlowRate(x[i])
+        
+        j = nBranchIn
+        for branch in outlet.branchList:
+            branch.setFlowRate(x[j])
+            j += 1
+
+        k = nBranch
+        for node in VNodeList:
+            node.setPressure(x[k])
+            k += 1

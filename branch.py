@@ -18,7 +18,6 @@ class Branch:
         self.radius = None
         self.resistance = None
         self.flowrate = None
-        self.generation = None
 
     def getProximal(self):
         return self.proximal
@@ -34,6 +33,9 @@ class Branch:
 
     def getParent(self):
         return self.parent
+
+    def removeParent(self):
+        self.parent = None
 
     def setChild(self, child):
         self.children.append(child)
@@ -67,9 +69,3 @@ class Branch:
 
     def getFlowRate(self):
         return self.flowrate
-
-    def setGeneration(self, gen):
-        self.generation = gen
-    
-    def getGeneration(self):
-        return self.generation

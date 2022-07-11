@@ -193,6 +193,79 @@ def plotGeneration(col):
     plt.savefig("spaceColonization_%d_%d_%d.png" % (col.D, col.dk, col.di))
     plt.show()
 
+def plotFlowRate2x(col1, col2):
+    fig = plt.figure()
+    ax = mplot3d.Axes3D(fig)
+    liver, mesh = getLiverSTL()
+    ax.add_collection3d(liver)
+
+    # Set up cmap
+    min1, max1 = getFlowRateLims(col1); min2, max2 = getFlowRateLims(col2)
+    min = np.min([min1, min2]); max = np.max([max1, max2])
+    cmap = matplotlib.cm.get_cmap('cool')
+    norm = matplotlib.colors.Normalize(vmin = min, vmax = max)
+    mymap = matplotlib.cm.ScalarMappable(norm = norm, cmap = cmap)
+
+    for branch in col1.branchList:
+        coords = getBranchCoords(branch)
+        color = mymap.to_rgba(branch.getFlowRate())[:-1]
+        rad = branch.getRadius()
+        for j in range(len(coords) - 1):
+            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', lw = rad, color = color)
+    for branch in col2.branchList:
+        coords = getBranchCoords(branch)
+        color = mymap.to_rgba(branch.getFlowRate())[:-1]
+        rad = branch.getRadius()
+        for j in range(len(coords) - 1):
+            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', lw = rad, color = color)
+
+    bound_mesh(ax, mesh)
+    ax.set_title("D = %d, dk = %d, di = %d" % (col1.D, col1.dk, col1.di))
+    ax.view_init(elev=0., azim=-90.)
+    ax.set_axis_off()
+    fig.colorbar(mymap,  label = 'Flow Rate', orientation = 'vertical', pad = -0.1, shrink = 0.5)
+    plt.savefig("spaceColonization_%d_%d_%d.png" % (col1.D, col1.dk, col1.di))
+    plt.show()
+
+def plotPressure2x(col1, col2):
+    fig = plt.figure()
+    ax = mplot3d.Axes3D(fig)
+    liver, mesh = getLiverSTL()
+    ax.add_collection3d(liver)
+
+    # Set up cmap
+    min1, max1 = getPressureLims2x(col1); min2, max2 = getPressureLims2x(col2)
+    min = np.min([min1, min2]); max = np.max([max1, max2])
+    cmap = matplotlib.cm.get_cmap('cool')
+    norm = matplotlib.colors.Normalize(vmin = min, vmax = max)
+    mymap = matplotlib.cm.ScalarMappable(norm = norm, cmap = cmap)
+
+    for branch in col1.branchList:
+        coords = getBranchCoords(branch)
+        for j in range(len(coords) - 1):
+            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'k-')
+    for node in col1.nodeList:
+        if node.isFurcation() or node.isTerminal() or node.isRoot():
+            nodeLoc = node.getLocation()
+            ax.plot3D(nodeLoc[0], nodeLoc[1], nodeLoc[2], 'o', color = mymap.to_rgba(node.getPressure())[:-1])
+
+    for branch in col2.branchList:
+        coords = getBranchCoords(branch)
+        for j in range(len(coords) - 1):
+            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'k-')
+    for node in col2.nodeList:
+        if node.isFurcation() or node.isRoot():
+            nodeLoc = node.getLocation()
+            ax.plot3D(nodeLoc[0], nodeLoc[1], nodeLoc[2], 'o', color = mymap.to_rgba(node.getPressure())[:-1])
+
+    bound_mesh(ax, mesh)
+    ax.set_title("D = %d, dk = %d, di = %d" % (col1.D, col1.dk, col1.di))
+    ax.view_init(elev=25., azim=-55.)
+    ax.set_axis_off()
+    fig.colorbar(mymap,  label = 'Pressure', orientation = 'vertical', pad = -0.1, shrink = 0.5)
+    plt.savefig("spaceColonization_%d_%d_%d.png" % (col1.D, col1.dk, col1.di))
+    plt.show()
+
 def getFlowRateLims(col):
     max = -np.inf
     min = np.inf
@@ -201,6 +274,17 @@ def getFlowRateLims(col):
             max = branch.getFlowRate()
         if branch.getFlowRate() < min:
             min = branch.getFlowRate()
+    return min, max
+
+def getPressureLims2x(col):
+    max = -np.inf
+    min = np.inf
+    for node in col.nodeList:
+        if node.isFurcation() or node.isRoot():
+            if node.getPressure() > max:
+                max = node.getPressure()
+            if node.getPressure() < min:
+                min = node.getPressure()
     return min, max
 
 def getPressureLims(col):
