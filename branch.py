@@ -18,6 +18,9 @@ class Branch:
         self.radius = None
         self.resistance = None
         self.flowrate = None
+        self.volume = None
+        self.fluid = 0
+        self.buffer = 0
 
     def getProximal(self):
         return self.proximal
@@ -69,3 +72,28 @@ class Branch:
 
     def getFlowRate(self):
         return self.flowrate
+
+    def setVolume(self, V):
+        self.volume = V
+
+    def getVolume(self):
+        return self.volume
+
+    def addFluid(self, V):
+        if self.fluid + V > self.getVolume():
+            self.setBuffer(self.fluid + V - self.getVolume())
+            self.fluid = self.volume
+        else:
+            self.fluid += V
+
+    def getFluid(self):
+        return self.fluid
+
+    def percentFull(self):
+        return self.getFluid()/self.getVolume()
+
+    def setBuffer(self, V):
+        self.buffer = V
+
+    def getBuffer(self):
+        return self.buffer

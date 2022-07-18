@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from stl import mesh as np_mesh
 from mpl_toolkits import mplot3d
+import colony
 
 def getLiverSTL():
     # Load the STL files and add the vectors to the plot
@@ -392,3 +393,45 @@ def getBranchCoords(branch):
         coordList.append(curNode.getLocation())
     coordList.reverse()
     return coordList
+
+def plotPressureDistribution(col):
+    pressureDist = list()
+    for node in col.nodeList:
+        if node.isTerminal():
+            pressureDist.append(node.getPressure())
+            print('Pressure = %.2f' %pressureDist[-1])
+    plt.hist(pressureDist, 10, (0,10))
+    plt.axvline(np.asarray(pressureDist).mean(), color='k', linestyle='dashed', linewidth=1)
+    plt.xlabel('Pressure')
+    plt.ylabel('Frequency')
+    plt.show()
+
+def plotFilling(col,time):
+    fig = plt.figure()
+    ax = mplot3d.Axes3D(fig)
+    liver, mesh = getLiverSTL()
+    ax.add_collection3d(liver)
+
+    for branch in col.branchList:
+        length = col.branchLength(branch)
+        cumLength = 0
+        coords = getBranchCoords(branch)
+
+        for j in range(len(coords) - 1):
+            # Update the length to see how much we should color as filled
+            cumLength += np.linalg.norm(coords[j+1] - coords[j])
+            if cumLength/length <= branch.percentFull():
+                color = np.array([1,0,0])
+            else:
+                color = np.array([0,0,1])
+            # Now plot
+            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', c = color, lw = branch.getRadius())
+
+        if branch.isTerminal():
+            ax.plot3D(coords[-1][0],coords[-1][1],coords[-1][2],'ko')
+
+    bound_mesh(ax, mesh)
+    ax.set_title("T = %.2f" %time)
+    ax.view_init(elev=25., azim=-55.)
+    plt.savefig("fill_%.2f.png" %time, bbox_inches='tight')
+    plt.close(fig)

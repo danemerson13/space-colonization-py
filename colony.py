@@ -1,5 +1,7 @@
 import attractor, node, branch
 import numpy as np
+import plotter
+import imageio, os
 
 class Colony:
     def __init__(self, D, dk, di, targets, attractors, root = None, nodes = None):
@@ -39,12 +41,15 @@ class Colony:
         # Returns np array with locations of the attractors
         return self.getLocationArray(self.attractorList)
 
-    def getNodeArray(self):
+    def getNodeArray(self, initflag):
         # Returns np array with locations of the nodes
         # Fill terminal nodes with inf since we dont want to grow from them
+        # If we are growing the tree from initialized tree, we also dont want to grow from the root node (initflag serves this purpose)
         arr = self.getLocationArray(self.nodeList)
         for i in range(len(self.nodeList)):
             if self.nodeList[i].isTerminal():
+                arr[i,:] = np.full((3,), np.inf)
+            elif not initflag and self.nodeList[i].isRoot():
                 arr[i,:] = np.full((3,), np.inf)
         return arr
 
@@ -60,10 +65,10 @@ class Colony:
         # Computes the euclidean distance between pt and every point in arr
         return np.linalg.norm(arr - pt, axis = 1)
 
-    def findClosestNode(self):
+    def findClosestNode(self, initflag):
         # For each of the attractors, return a list with a pointer to the closest node, 
         # permitting that the attractor is within the sphere of influence, di. Otherwise return None
-        nodeArr = self.getNodeArray()
+        nodeArr = self.getNodeArray(initflag)
         closestNode = list()
         for i in range(len(self.attractorList)):
             dist = self.computeDistanceVec(nodeArr, self.attractorList[i].getLocation())
@@ -101,19 +106,6 @@ class Colony:
         nodeLoc = nodePtr.getLocation()
         return np.linalg.norm(attractorLoc - nodeLoc)
 
-    def findClosestNode(self):
-        # For each of the attractors, return a list with a pointer to the closest node, 
-        # permitting that the attractor is within the sphere of influence, di. Otherwise return None
-        nodeArr = self.getNodeArray()
-        closestNode = list()
-        for i in range(len(self.attractorList)):
-            dist = self.computeDistanceVec(nodeArr, self.attractorList[i].getLocation())
-            if min(dist) < self.di:
-                closestNode.append(self.nodeList[np.argmin(dist)])
-            else:
-                closestNode.append(None)
-        return closestNode
-
     def killAttractors(self):
         nodeLocs = self.getLocationArray(self.nodeList)
         # If you remove items of a list while iterating through we will mess things up, instead keep a list
@@ -129,14 +121,14 @@ class Colony:
         for att in killList:
             self.attractorList.remove(att)
 
-    def createTree(self):
+    def createTree(self, initflag):
         prevNodeCount = len(self.nodeList)
         loop = 0
         while self.numTargets() > 0:
             # First find the node closest to each attractor
             # Note: this is returned as a list with pointers to the closest nodes, 
             # with None returned where there are no nodes within di
-            influencers = self.findClosestNode()
+            influencers = self.findClosestNode(initflag)
             # Take the unique entries of the influencer list
             growthNodes = list(set(influencers))
             # If there is a None entry, remove it
@@ -194,6 +186,8 @@ class Colony:
             if parent != None:
                 bran.setParent(parent)
                 parent.setChild(bran)
+            elif not bran.isRoot():
+                print('flag')
 
     def traverseBranch(self, endNode):
         # From the distal list we can traverse each branch backwards until we reach 
@@ -250,6 +244,8 @@ class Colony:
         self.branchList[0].setRadius(initial)
         # Set the subsequent radii
         for i in range(1,len(self.branchList)):
+            if self.branchList[i].getParent() == None:
+                print('Err')
             ratio = self.countTerminals(self.branchList[i])/self.countTerminals(self.branchList[i].getParent())
             self.branchList[i].setRadius(np.sqrt(ratio * self.branchList[i].getParent().getRadius()**2))
 
@@ -261,6 +257,12 @@ class Colony:
             length += np.linalg.norm(curNode.getLocation() - curNode.getParent().getLocation())
             curNode = curNode.getParent()
         return length
+
+    def setBranchVolume(self):
+        for branch in self.branchList:
+            rad = branch.getRadius()
+            length = self.branchLength(branch)
+            branch.setVolume(np.pi * rad**2 * length)
 
     def setResistance(self, mu):
         # Convert mu from centipoise to dyn-s/cm^2
@@ -351,14 +353,51 @@ class Colony:
                 if np.linalg.norm(bran.getDistal().getLocation() - branch.getDistal().getLocation()) < eps:
                     return bran
 
-    def replaceTerminalNodes(self, inlet):
-        eps = 1e-6
+    def percentFull(self):
+        fluid = 0
+        vol = 0
         for branch in self.branchList:
-            if branch.getDistal().isTerminal():
-                for node in inlet.nodeList:
-                    if np.linalg.norm(branch.getDistal().getLocation() - node.getLocation()) < eps:
-                        branch.setDistal(node)
-                        
+            fluid += branch.getFluid()
+            vol += branch.getVolume()
+        return fluid/vol
+
+    def fillStep(self, dt):
+        # Start with root branch
+        V = self.branchList[0].getFlowRate()*dt
+        self.branchList[0].addFluid(V)
+        # Now step through all the branches and move around the excess fluid
+        for branch in self.branchList:
+            # If the branch has excess fluid and isnt terminal, transfer to its children
+            if branch.getBuffer() > 0 and not branch.isTerminal():
+                Q = branch.getFlowRate()
+                # For each child give its corresponding amount of excess fluid based on proportion of total flow rate
+                for child in branch.getChildren():
+                    ratio = child.getFlowRate() / Q
+                    child.addFluid(branch.getBuffer() * ratio)
+                # Zero out the buffer from the parent branch
+                branch.setBuffer(0)
+            else:
+                # Otherwise can just zero the buffer on the terminal nodes
+                branch.setBuffer(0)
+        
+    def fillNetwork(self, dt):
+        # Assign volumes
+        self.setBranchVolume()
+        with imageio.get_writer('filling.gif', mode  = 'I') as writer:
+            # Begin iteration
+            time = 0
+            plotter.plotFilling(self, time)
+            image = imageio.imread('fill_%.2f.png' %time)
+            writer.append_data(image)
+            os.remove('fill_%.2f.png' %time)
+            while self.percentFull() < 1:
+                self.fillStep(dt)
+                time += dt
+                plotter.plotFilling(self, time)
+                image = imageio.imread('fill_%.2f.png' %time)
+                writer.append_data(image)
+                os.remove('fill_%.2f.png' %time)
+  
 def solveResistanceNetwork2x(inlet, outlet, Pin, Pout):
         nBranchIn = len(inlet.branchList); nBranchOut = len(outlet.branchList)
         nNode = 0

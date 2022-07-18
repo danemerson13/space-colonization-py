@@ -5,9 +5,20 @@ import colony
 import kCluster
 import plotter
 
+def initTree(col):
+    col.createTree(initflag = True)
+    col.trimNodes()
+
+def prepTree(col, initialRadius, mu):
+    col.createTree(initflag = False)
+    col.trimNodes()
+    col.createBranches()
+    col.setRadii(initialRadius)
+    col.setResistance(mu)
+
 def main():
     # Geometry parameters
-    n_clust = 32
+    n_clust = 100
     initialRadius = 7.5 # mm?
 
     # Algorithm parameters
@@ -36,46 +47,29 @@ def main():
     # Outlet targets
     out_targets = np.array([[25., 20., 60.], [-35., 10., 80.]])
 
+    start = time.time()
+
     # Intialize the first two branches
     init1 = colony.Colony(D, dk, di, in_targets, pts, inlet)
-    init1.createTree()
-    init1.trimNodes()
+    initTree(init1)
 
     # Build the full tree from the initialization
     col1 = colony.Colony(D, dk, di, kmeans.cluster_centers_, pts, None, init1.nodeList)
-
-    col1.createTree()
-    col1.trimNodes()
-    col1.createBranches()
-    col1.setRadii(initialRadius)
-    col1.setResistance(mu)
+    prepTree(col1, initialRadius, mu)
 
     # Initialize outlet tree
     init2 = colony.Colony(D, dk, di, out_targets, pts, outlet)
-    init2.createTree()
-    init2.trimNodes()
+    initTree(init2)
 
     # Build the full tree from the initialization
     col2 = colony.Colony(D, dk, di, kmeans.cluster_centers_, pts, None, init2.nodeList)
+    prepTree(col2, initialRadius, mu)
 
-    col2.createTree()
-    col2.trimNodes()
-    col2.createBranches()
-    col2.setRadii(initialRadius)
-    col2.setResistance(mu)
-
-    # col2.replaceTerminalNodes(col1)
-
-    # col.solveResistanceNetwork(Pin, Pout)
-
-    # plotter.plotFlowRate(col)
-    # plotter.plotPressure(col)
     colony.solveResistanceNetwork2x(col1, col2, Pin, Pout)
 
-    plotter.plotFlowRate2x(col1, col2)
-    plotter.plotPressure2x(col1, col2)
+    end = time.time()
 
-    print("Hello World")
+    print('Number of Clusters %d, Req = %.3f, Q = %.3f, Time = %.1f secs' %(n_clust, (Pin - Pout)/col1.branchList[0].getFlowRate(), col1.branchList[0].getFlowRate(), end - start))
 
 if __name__ == "__main__":
     main()
