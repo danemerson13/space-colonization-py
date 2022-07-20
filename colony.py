@@ -85,7 +85,14 @@ class Colony:
         # Normalize attractor normals
         attractorNormals = (attractorNormals.T / np.linalg.norm(attractorNormals, axis = 1)).T
         # Compute mean of all unit normals
-        return np.mean(attractorNormals, axis = 0)
+        meanNormal = np.mean(attractorNormals, axis = 0)
+        # If the computed step normal is zero, randomly step towards one of the normals
+        # This was an edge case where the algorithm would get stuck between two attractors 
+        # and the computed normal would be zero and effectively no step was taken
+        if np.linalg.norm(meanNormal) < 1e-6:
+            return attractorNormals[np.random.choice(range(len(attractorNormals)))]
+        else:
+            return meanNormal
         
     def addNode(self, dir, growthNode):
         # Add a node in direction dir, D distance from node
@@ -125,6 +132,8 @@ class Colony:
         prevNodeCount = len(self.nodeList)
         loop = 0
         while self.numTargets() > 0:
+            # if loop == 2500:
+            #     print("Pause")
             # First find the node closest to each attractor
             # Note: this is returned as a list with pointers to the closest nodes, 
             # with None returned where there are no nodes within di
@@ -360,6 +369,19 @@ class Colony:
             fluid += branch.getFluid()
             vol += branch.getVolume()
         return fluid/vol
+
+    def totalVolume(self):
+        self.setBranchVolume()
+        vol = 0.
+        for branch in self.branchList:
+            vol += branch.getVolume()
+        return vol
+
+    def totalLength(self):
+        length = 0.
+        for branch in self.branchList:
+            length += self.branchLength(branch)
+        return length
 
     def fillStep(self, dt):
         # Start with root branch

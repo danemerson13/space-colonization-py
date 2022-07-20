@@ -61,6 +61,26 @@ def set_axes_equal(ax):
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
+def plotNodeList(col):
+    print("Hello")
+    fig = plt.figure()
+    ax = mplot3d.Axes3D(fig)
+    liver, mesh = getLiverSTL()
+    ax.add_collection3d(liver)
+
+    for i in range(1, len(col.nodeList)):
+        prox = col.nodeList[i-1].getLocation()
+        dist = col.nodeList[i].getLocation()
+        print("Norm: ", np.linalg.norm(prox - dist))
+        
+        ax.plot3D([prox[0],dist[0]],[prox[1],dist[1]],[prox[2],dist[2]],'b-')
+
+    bound_mesh(ax, mesh)
+    ax.set_title("D = %d, dk = %d, di = %d" % (col.D, col.dk, col.di))
+    ax.view_init(elev=25., azim=-55.)
+    plt.savefig("spaceColonization_%d_%d_%d.png" % (col.D, col.dk, col.di))
+    plt.show()
+
 def plotByBranch(col):
     fig = plt.figure()
     ax = mplot3d.Axes3D(fig)
