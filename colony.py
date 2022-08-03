@@ -92,11 +92,24 @@ class Colony:
         if np.linalg.norm(meanNormal) < 1e-6:
             return attractorNormals[np.random.choice(range(len(attractorNormals)))]
         else:
-            return meanNormal
-        
+            return meanNormal/np.linalg.norm(meanNormal)
+
+    def repeatedStepCheck(self, loc, growthNode):
+        # Checks for existing children of the growthNode that have the same location as the prospective new node
+        # Returns True if there is a existing child with the same location, False otherwise
+        eps = 1e-6
+        for child in growthNode.getChildren():
+            if np.linalg.norm(loc - child.getLocation()) < eps:
+                return True
+        return False
+
     def addNode(self, dir, growthNode):
         # Add a node in direction dir, D distance from node
         loc = growthNode.getLocation() + dir * self.D
+        while self.repeatedStepCheck(loc, growthNode):
+            print("REPEATED STEP")
+            dir = dir * 0.5
+            loc = growthNode.getLocation() + dir * self.D
         self.nodeList.append(node.Node(loc, parent = growthNode))
         # Also update parent node to have this new node as its child
         growthNode.setChild(self.nodeList[-1])

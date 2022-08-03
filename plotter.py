@@ -61,17 +61,15 @@ def set_axes_equal(ax):
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
-def plotNodeList(col):
-    print("Hello")
+def plotByNode(col):
     fig = plt.figure()
     ax = mplot3d.Axes3D(fig)
     liver, mesh = getLiverSTL()
     ax.add_collection3d(liver)
 
     for i in range(1, len(col.nodeList)):
-        prox = col.nodeList[i-1].getLocation()
-        dist = col.nodeList[i].getLocation()
-        print("Norm: ", np.linalg.norm(prox - dist))
+        prox = col.nodeList[i].getLocation()
+        dist = col.nodeList[i].getParent().getLocation()
         
         ax.plot3D([prox[0],dist[0]],[prox[1],dist[1]],[prox[2],dist[2]],'b-')
 

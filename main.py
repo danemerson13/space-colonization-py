@@ -17,20 +17,14 @@ def prepTree(col, initialRadius, mu):
     col.setResistance(mu)
 
 def main():
-    # n_clusters = np.concatenate([np.arange(5,101,5),np.arange(110,201,10),np.arange(250,501,50)])
-    n_clusters = np.arange(110,201,10)
-    for n_clust in n_clusters:
-        run(n_clust)
-
-def run(n_clust):
     # Geometry parameters
-    # n_clust = 100
+    n_clust = 50
     initialRadius = 7.5 # mm?
 
     # Algorithm parameters
-    D = 15 # Step distance
-    dk = 20 # Kill distance
-    di = 25 # Sphere of influence distance
+    D = 10 # Step distance
+    dk = 15 # Kill distance
+    di = 20 # Sphere of influence distance
 
     # Blood parameters
     mu = 3.5 # centipoise
@@ -53,27 +47,28 @@ def run(n_clust):
     # Outlet targets
     out_targets = np.array([[25., 20., 60.], [-35., 10., 80.]])
 
-    start = time.time()
-
     # Intialize the first two branches
     init1 = colony.Colony(D, dk, di, in_targets, pts, inlet)
     initTree(init1)
+
     init2 = colony.Colony(D, dk, di, out_targets, pts, outlet)
     initTree(init2)
+
+    # plotter.plotByNode(init1)
+    # plotter.plotByNode(init2)
 
     # Build the full tree from the initialization
     col1 = colony.Colony(D, dk, di, kmeans.cluster_centers_, pts, None, init1.nodeList)
     prepTree(col1, initialRadius, mu)
+
     col2 = colony.Colony(D, dk, di, kmeans.cluster_centers_, pts, None, init2.nodeList)
     prepTree(col2, initialRadius, mu)
 
     colony.solveResistanceNetwork2x(col1, col2, Pin, Pout)
 
-    end = time.time()
+    plotter.plotFlowRate2x(col1, col2)
 
-    # plotter.plotFlowRate2x(col1, col2)
-
-    print('Number of Clusters %d, Req = %.3f, V = %.0f, L = %.0f, Time = %.1f secs' %(n_clust, (Pin - Pout)/col1.branchList[0].getFlowRate(), col1.totalVolume(), col1.totalLength(), end - start))
+    print("Hello World")
 
 if __name__ == "__main__":
     main()
