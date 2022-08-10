@@ -37,7 +37,6 @@ def set_axes_equal(ax):
     '''Make axes of 3D plot have equal scale so that spheres appear as spheres,
     cubes as cubes, etc..  This is one possible solution to Matplotlib's
     ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
-
     Input
     ax: a matplotlib axis, e.g., as output from plt.gca().
     '''
@@ -61,17 +60,15 @@ def set_axes_equal(ax):
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
-def plotNodeList(col):
-    print("Hello")
+def plotByNode(col):
     fig = plt.figure()
     ax = mplot3d.Axes3D(fig)
     liver, mesh = getLiverSTL()
     ax.add_collection3d(liver)
 
     for i in range(1, len(col.nodeList)):
-        prox = col.nodeList[i-1].getLocation()
-        dist = col.nodeList[i].getLocation()
-        print("Norm: ", np.linalg.norm(prox - dist))
+        prox = col.nodeList[i].getLocation()
+        dist = col.nodeList[i].getParent().getLocation()
         
         ax.plot3D([prox[0],dist[0]],[prox[1],dist[1]],[prox[2],dist[2]],'b-')
 
@@ -406,11 +403,18 @@ def plotByBranchDouble(init1, col1, init2, col2):
 
 def getBranchCoords(branch):
     coordList = list()
-    curNode = branch.getDistal()
-    coordList.append(curNode.getLocation())
-    while curNode != branch.getProximal():
-        curNode = curNode.getParent()
+    if branch.type == "Inlet":
+        curNode = branch.getDistal()
         coordList.append(curNode.getLocation())
+        while curNode != branch.getProximal():
+            curNode = curNode.getParents()[0]
+            coordList.append(curNode.getLocation())
+    elif branch.type == "Outlet":
+        curNode = branch.getProximal()
+        coordList.append(curNode.getLocation())
+        while curNode != branch.getDistal():
+            curNode = curNode.getChildren()[0]
+            coordList.append(curNode.getLocation())
     coordList.reverse()
     return coordList
 

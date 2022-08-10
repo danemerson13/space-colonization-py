@@ -1,18 +1,20 @@
 class Branch:
     # Properties of a branch
+    # type = {"Inlet", "Outlet"}
     # proximal: type = Node
     # distal: type = Node
-    # parent: type = Branch
+    # parent: type = list(Branch)
     # children: type = list(Branch)
     # radius: type = double
     # resistance: type = double
     # flowrate: type = double
     # generation: type = int
 
-    def __init__(self, prox, dist):
+    def __init__(self, type, prox, dist):
+        self.type = type
         self.proximal = prox
         self.distal = dist
-        self.parent = None
+        self.parents = list()
         self.children = list()
 
         self.radius = None
@@ -32,13 +34,13 @@ class Branch:
         return self.distal
 
     def setParent(self, parent):
-        self.parent = parent
+        self.parents.append(parent)
 
-    def getParent(self):
-        return self.parent
+    def getParents(self):
+        return self.parents
 
-    def removeParent(self):
-        self.parent = None
+    def removeParent(self, parent):
+        self.parents.remove(parent)
 
     def setChild(self, child):
         self.children.append(child)

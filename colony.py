@@ -1,16 +1,19 @@
-import attractor, node, branch
+import attractor, node, superlobule, branch
 import numpy as np
 import plotter
 import imageio, os
 
 class Colony:
-    def __init__(self, D, dk, di, targets, attractors, root = None, nodes = None):
+    def __init__(self, D, dk, di, type, targets = np.array([]), attractors = np.array([]), root = None, nodes = None):
 
         # Expectation is that either an empty tree with a root node is passed
         # OR an initialized tree with node and branchLists is passed
         self.D = D
         self.dk = dk
         self.di = di
+
+        # Assign type - either "Inlet" or "Outlet"
+        self.type = type
 
         self.attractorList = list()
         self.branchList = list()
@@ -28,7 +31,7 @@ class Colony:
             self.attractorList.append(attractor.Attractor(attractors[i,:], False))
         # Add the root node if there is one
         if root is not None:
-            self.nodeList.append(node.Node(root))
+            self.nodeList.append(node.Node(root, type))
 
     def getLocationArray(self, inputList):
         # Returns np array with euclidean coordinates of input list (attractors, nodes, etc.)
@@ -92,19 +95,32 @@ class Colony:
         if np.linalg.norm(meanNormal) < 1e-6:
             return attractorNormals[np.random.choice(range(len(attractorNormals)))]
         else:
-            return meanNormal
-        
+            return meanNormal/np.linalg.norm(meanNormal)
+
+    def repeatedStepCheck(self, loc, growthNode):
+        # Checks for existing children of the growthNode that have the same location as the prospective new node
+        # Returns True if there is a existing child with the same location, False otherwise
+        eps = 1e-6
+        for child in growthNode.getChildren():
+            if np.linalg.norm(loc - child.getLocation()) < eps:
+                return True
+        return False
+
     def addNode(self, dir, growthNode):
         # Add a node in direction dir, D distance from node
         loc = growthNode.getLocation() + dir * self.D
-        self.nodeList.append(node.Node(loc, parent = growthNode))
+        while self.repeatedStepCheck(loc, growthNode):
+            print("REPEATED STEP")
+            dir = dir * 0.5
+            loc = growthNode.getLocation() + dir * self.D
+        self.nodeList.append(node.Node(loc, self.type, parent = growthNode))
         # Also update parent node to have this new node as its child
         growthNode.setChild(self.nodeList[-1])
 
     def addTerminalNode(self, dir, D_exact, growthNode):
         # Add a *terminal* node in direction dir, D_exact distance from node
         loc = growthNode.getLocation() + dir * D_exact
-        self.nodeList.append(node.Node(loc, parent = growthNode, terminal = True))
+        self.nodeList.append(node.Node(loc, self.type, parent = growthNode, terminal = True))
         # Also update parent node to have this new node as its child
         growthNode.setChild(self.nodeList[-1])
 
@@ -181,13 +197,13 @@ class Colony:
         # Leaf nodes have 0 children, furcation nodes have > 1 child
         for node in self.nodeList:
             nChildren = len(node.getChildren())
-            if nChildren == 0 or nChildren > 1 and node.getParent() != None:
+            if nChildren == 0 or nChildren > 1 and len(node.getParents()) > 0:
                 distList.append(node)
         # From the distal list we can traverse each branch backwards until we reach 
         # a node with multiple children, or no parent in the case of the root branch
         for node in distList:
             prox, dist = self.traverseBranch(node)
-            self.branchList.append(branch.Branch(prox, dist))
+            self.branchList.append(branch.Branch(self.type, prox, dist))
         # Now assign parent - child relationships
         for bran in self.branchList:
             parent = self.findParentBranch(bran)
@@ -202,9 +218,9 @@ class Colony:
         # From the distal list we can traverse each branch backwards until we reach 
         # a node with multiple children, or no parent in the case of the root branch
         dist = endNode
-        curNode = endNode.getParent()
-        while len(curNode.getChildren()) < 2 and curNode.getParent() != None:
-            curNode = curNode.getParent()
+        curNode = endNode.getParents()[0]
+        while len(curNode.getChildren()) < 2 and len(curNode.getParents()) > 0:
+            curNode = curNode.getParents()[0]
         prox = curNode
         return prox, dist
 
@@ -221,8 +237,8 @@ class Colony:
         for curNode in self.nodeList:
             if curNode.isTerminal():
                 criticalNodes.append(curNode)
-                while curNode.getParent():
-                    curNode = curNode.getParent()
+                while len(curNode.getParents()) > 0:
+                    curNode = curNode.getParents()[0]
                     criticalNodes.append(curNode)
         # Remove the nodes not in criticalNodes list
         for node in reversed(self.nodeList):
@@ -233,14 +249,14 @@ class Colony:
         # Remove the node
         self.nodeList.remove(node)
         # Also remove node from parents child list
-        node.getParent().removeChild(node) 
+        node.getParents()[0].removeChild(node) 
     
     def countTerminals(self, branch):
         count = 0
         for curBranch in self.branchList:
             if curBranch.isTerminal():
                 while not curBranch.isRoot() and curBranch != branch:
-                    curBranch = curBranch.getParent()
+                    curBranch = curBranch.getParents()[0]
                 if curBranch == branch:
                     count += 1
         return count
@@ -253,18 +269,18 @@ class Colony:
         self.branchList[0].setRadius(initial)
         # Set the subsequent radii
         for i in range(1,len(self.branchList)):
-            if self.branchList[i].getParent() == None:
+            if len(self.branchList[i].getParents()) == 0:
                 print('Err')
-            ratio = self.countTerminals(self.branchList[i])/self.countTerminals(self.branchList[i].getParent())
-            self.branchList[i].setRadius(np.sqrt(ratio * self.branchList[i].getParent().getRadius()**2))
+            ratio = self.countTerminals(self.branchList[i])/self.countTerminals(self.branchList[i].getParents()[0])
+            self.branchList[i].setRadius(np.sqrt(ratio * self.branchList[i].getParents()[0].getRadius()**2))
 
     def branchLength(self, branch):
         # Walk from distal to proximal node
         curNode = branch.getDistal()
         length = 0
         while not(curNode == branch.getProximal()):
-            length += np.linalg.norm(curNode.getLocation() - curNode.getParent().getLocation())
-            curNode = curNode.getParent()
+            length += np.linalg.norm(curNode.getLocation() - curNode.getParents()[0].getLocation())
+            curNode = curNode.getParents()[0]
         return length
 
     def setBranchVolume(self):
@@ -347,6 +363,13 @@ class Colony:
         for node in VNodeList:
             node.setPressure(x[j])
             j += 1
+
+    def findNodeByLoc(self, loc):
+        eps = 1e-10
+        loc = loc.getLocation()
+        for curnode in self.nodeList:
+            if np.linalg.norm(loc- curnode.getLocation()) < eps:
+                return curnode
 
     def findMatchingNode(self, node):
         eps = 1e-6
@@ -516,3 +539,27 @@ def solveResistanceNetwork2x(inlet, outlet, Pin, Pout):
         for node in VNodeList:
             node.setPressure(x[k])
             k += 1
+
+def reverseColony(col):
+    # Takes inlet colony and reverses to be outlet tree
+    new = Colony(col.D, col.dk, col.di, "Outlet")
+    # Step through all the nodes and reverse their parent and child lists
+    for curnode in col.nodeList:
+        new.nodeList.append(node.Node(curnode.getLocation(), "Outlet"))
+    for i, curnode in enumerate(new.nodeList):
+
+        # NEED TO SET CHILDREN AND PARENTS TO CORRESPONDING NODE IN NEW DATA STRUCTURE, CURRENTLY POINTING TO THE OLD NODES...
+        
+        for parent in col.nodeList[i].getParents():
+            curnode.setChild(parent)
+        for child in col.nodeList[i].getChildren():
+            curnode.setParent(child)
+    # Step through all the branches and reverse their prox/distal nodes, and parent child lists
+    for curbranch in col.branchList:
+        new.branchList.append(branch.Branch("Outlet", prox = new.findNodeByLoc(curbranch.getDistal()), dist = new.findNodeByLoc(curbranch.getProximal())))
+    for i, curbranch in enumerate(new.branchList):
+        for parent in col.branchList[i].getParents():
+            curbranch.setChild(parent)
+        for child in col.branchList[i].getChildren():
+            curbranch.setParent(child)
+    return new
