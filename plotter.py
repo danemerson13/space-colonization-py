@@ -409,13 +409,13 @@ def getBranchCoords(branch):
         while curNode != branch.getProximal():
             curNode = curNode.getParents()[0]
             coordList.append(curNode.getLocation())
+        coordList.reverse()
     elif branch.type == "Outlet":
         curNode = branch.getProximal()
         coordList.append(curNode.getLocation())
         while curNode != branch.getDistal():
             curNode = curNode.getChildren()[0]
             coordList.append(curNode.getLocation())
-    coordList.reverse()
     return coordList
 
 def plotPressureDistribution(col):

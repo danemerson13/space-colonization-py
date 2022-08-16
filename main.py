@@ -18,7 +18,7 @@ def prepTree(col, initialRadius, mu):
 
 def main():
     # Geometry parameters
-    n_clust = 10
+    n_clust = 200
     initialRadius = 7.5 # mm?
 
     # Algorithm parameters
@@ -47,6 +47,8 @@ def main():
     # Outlet targets
     out_targets = np.array([[25., 20., 60.], [-35., 10., 80.]])
 
+    start = time.time()
+
     # Intialize the first two branches
     init1 = colony.Colony(D, dk, di, "Inlet", in_targets, pts, inlet)
     initTree(init1)
@@ -66,10 +68,14 @@ def main():
 
     out = colony.reverseColony(col2)
 
-    plotter.plotByBranch(col2)
-    plotter.plotByBranch(out)
+    end = time.time()
 
-    print("Hello World")
+    print('Time: ', end - start, 'secs')
+
+    # plotter.plotByBranch(col2)
+    # plotter.plotByBranch(out)
+
+    print("All Done")
 
 if __name__ == "__main__":
     main()

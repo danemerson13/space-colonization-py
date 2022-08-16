@@ -12,12 +12,14 @@ class Colony:
         self.dk = dk
         self.di = di
 
-        # Assign type - either "Inlet" or "Outlet"
+        # Assign type - either "Inlet" or "Outlet" or "Total"
         self.type = type
 
         self.attractorList = list()
         self.branchList = list()
         self.nodeList = list()
+        self.slList = list()
+
         if nodes:
             for inNode in nodes:
                 self.nodeList.append(inNode)
@@ -106,13 +108,19 @@ class Colony:
                 return True
         return False
 
-    def addNode(self, dir, growthNode):
+    def addNode(self, dir, growthNode, activeAttractors):
         # Add a node in direction dir, D distance from node
         loc = growthNode.getLocation() + dir * self.D
-        while self.repeatedStepCheck(loc, growthNode):
-            print("REPEATED STEP")
-            dir = dir * 0.5
-            loc = growthNode.getLocation() + dir * self.D
+        if self.repeatedStepCheck(loc, growthNode):
+            # Instead step directly between the two targets (assuming dir < D)
+            modifiedLoc = np.array([0., 0., 0.])
+            for curattractor in activeAttractors:
+                modifiedLoc += self.attractorList[curattractor].getLocation()
+            modifiedLoc /= len(activeAttractors)
+            if np.linalg.norm(modifiedLoc - growthNode.getLocation()) < self.D:
+                loc = modifiedLoc
+            else:
+                RuntimeError("Edge Case 2 Error")
         self.nodeList.append(node.Node(loc, self.type, parent = growthNode))
         # Also update parent node to have this new node as its child
         growthNode.setChild(self.nodeList[-1])
@@ -148,8 +156,6 @@ class Colony:
         prevNodeCount = len(self.nodeList)
         loop = 0
         while self.numTargets() > 0:
-            # if loop == 2500:
-            #     print("Pause")
             # First find the node closest to each attractor
             # Note: this is returned as a list with pointers to the closest nodes, 
             # with None returned where there are no nodes within di
@@ -177,7 +183,7 @@ class Colony:
                     # Compute direction to step in
                     dir = self.attractorNormal(activeAttractors, growthNode)
                     # Add node in this direction at distance D
-                    self.addNode(dir, growthNode)
+                    self.addNode(dir, growthNode, activeAttractors)
             # Once all of the nodes have been added, we will kill any attractors within dk of
             # existing nodes. Note: we cannot kill target attractors, unless they have been reached
             self.killAttractors()
@@ -364,12 +370,21 @@ class Colony:
             node.setPressure(x[j])
             j += 1
 
-    def findNodeByLoc(self, loc):
+    def findNodeByLoc(self, oldNode):
         eps = 1e-10
-        loc = loc.getLocation()
+        loc = oldNode.getLocation()
         for curnode in self.nodeList:
             if np.linalg.norm(loc- curnode.getLocation()) < eps:
                 return curnode
+
+    def findBranchByLoc(self, oldBranch):
+        eps = 1e-10
+        oldDistLoc = oldBranch.getDistal().getLocation()
+        oldProxLoc = oldBranch.getProximal().getLocation()
+        # Find the a branch with a matching proximal node to the old distal node
+        for curbranch in self.branchList:
+            if (np.linalg.norm(oldDistLoc - curbranch.getProximal().getLocation()) < eps) and (np.linalg.norm(oldProxLoc - curbranch.getDistal().getLocation()) < eps):
+                return curbranch
 
     def findMatchingNode(self, node):
         eps = 1e-6
@@ -442,6 +457,13 @@ class Colony:
                 image = imageio.imread('fill_%.2f.png' %time)
                 writer.append_data(image)
                 os.remove('fill_%.2f.png' %time)
+
+    def addSL(self, loc, parent, child):
+        # Add the SL to slList. Default R = 0
+        self.slList.append(superlobule.SuperLobule(loc, parent, child, R = 0))
+        # Also connect the parent and children nodes
+        parent.addChild(child)
+        child.addParent(parent)
   
 def solveResistanceNetwork2x(inlet, outlet, Pin, Pout):
         nBranchIn = len(inlet.branchList); nBranchOut = len(outlet.branchList)
@@ -546,20 +568,38 @@ def reverseColony(col):
     # Step through all the nodes and reverse their parent and child lists
     for curnode in col.nodeList:
         new.nodeList.append(node.Node(curnode.getLocation(), "Outlet"))
+        if curnode.isRoot():
+            new.nodeList[-1].setTerminal(True)
     for i, curnode in enumerate(new.nodeList):
-
-        # NEED TO SET CHILDREN AND PARENTS TO CORRESPONDING NODE IN NEW DATA STRUCTURE, CURRENTLY POINTING TO THE OLD NODES...
-        
         for parent in col.nodeList[i].getParents():
-            curnode.setChild(parent)
+            newParent = new.findNodeByLoc(parent)
+            curnode.setChild(newParent)
         for child in col.nodeList[i].getChildren():
-            curnode.setParent(child)
+            newChild = new.findNodeByLoc(child)
+            curnode.setParent(newChild)
     # Step through all the branches and reverse their prox/distal nodes, and parent child lists
     for curbranch in col.branchList:
+        # Reverse prox/dist nodes
         new.branchList.append(branch.Branch("Outlet", prox = new.findNodeByLoc(curbranch.getDistal()), dist = new.findNodeByLoc(curbranch.getProximal())))
     for i, curbranch in enumerate(new.branchList):
-        for parent in col.branchList[i].getParents():
-            curbranch.setChild(parent)
-        for child in col.branchList[i].getChildren():
-            curbranch.setParent(child)
+        # Reverse parent and child lists
+        for oldParent in col.branchList[i].getParents():
+            curbranch.setChild(new.findBranchByLoc(oldParent))
+        for oldChild in col.branchList[i].getChildren():
+            curbranch.setParent(new.findBranchByLoc(oldChild))
     return new
+
+def matchingTerminal(inTerm, outCol):
+    # Takes a terminal from inlet tree and finds the correesponding terminal from the outlet tree
+    eps = 1e-10
+    inLoc = inTerm.getLocation()
+    for branch in outCol.branchList:
+        # Just look at the root branches in the outlet colony tree
+        if branch.isRoot():
+            # If the locations are identical, return the matching node
+            if np.linalg.norm(branch.getProximal().getLocation() - inLoc) < eps:
+                return branch.getProximal()
+
+def joinTrees(inlet, outlet):
+    # Combines inlet and (already reversed) outlet colonies into a single colony, with super lobules in between
+    new = Colony(inlet.D, inlet.dk, inlet.di, type = "", )
