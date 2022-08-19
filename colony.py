@@ -1,42 +1,259 @@
-import attractor, node, superlobule, branch
+import attractor, node, branch, superlobule
 import numpy as np
 import plotter
 import imageio, os
 
 class Colony:
-    def __init__(self, D, dk, di, type, targets = np.array([]), attractors = np.array([]), root = None, nodes = None):
-
-        # Expectation is that either an empty tree with a root node is passed
-        # OR an initialized tree with node and branchLists is passed
+    def __init__(self, D, dk, di, ):
+        
         self.D = D
         self.dk = dk
         self.di = di
 
-        # Assign type - either "Inlet" or "Outlet" or "Total"
-        self.type = type
-
         self.attractorList = list()
-        self.branchList = list()
         self.nodeList = list()
         self.slList = list()
+        self.branchList = list()
 
-        if nodes:
-            for inNode in nodes:
-                self.nodeList.append(inNode)
-                self.nodeList[-1].setTerminal(False)
+##### HIGH LEVEL FUNCTIONS #####
 
+    def initTree(self, targets, attractors, root):
+        # Add the attractors and target attractors
+        self.addAttractors(targets, attractors)
+        # Add the root node
+        self.nodeList.append(node.Node(root))
+
+        # Run SC Algorithm
+        self.runSpaceColonization(initflag = True)
+
+        # Trim the node list
+        self.trimNodes()
+
+    def createTree(self, targets, attractors, initNodeList, Rinitial, mu):
+        # Add the attractors and target attractors
+        self.addAttractors(targets, attractors)
+        # Add the initialized nodes
+        for inNode in initNodeList:
+            self.nodeList.append(inNode)
+            self.nodeList[-1].setSL(False)
+
+        # Run SC Algorithm
+        self.runSpaceColonization(initflag = False)
+
+        # Trim nodes and create branches
+        self.trimNodes()
+        self.createBranches()
+
+        # Assign radii and resistances
+        self.setRadii(Rinitial)
+        self.setResistance(mu)
+
+    def mergeTrees(self, outTree):
+        # First reverse the outlet tree
+        outTree = outTree.reverseTree()
+
+        # Find matching SL nodes between trees and place a SL to join them
+        for branch in self.branchList:
+            if branch.isTerminal():
+                self.slList.append(superlobule.SuperLobule(branch.getDistal().getLocation(), branch.getDistal(), outTree.findNodeByLoc(branch.getDistal().getLocation())))
+
+        # Add the nodes and branches from the outlet tree
+        for node in outTree.nodeList:
+            self.nodeList.append(node)
+        for branch in outTree.branchList:
+            self.branchList.append(branch)
+
+    def solveResistanceNetwork(self, Pin, Pout):
+        # Build square A matrix to solve linear system Ax = b
+        # x is the all of the branchwise flow rates and nodal pressures, concatenated into one vector
+        # A will be comprised of three types of equations
+        # (1) Branch eqns: Vdist - Vprox - IR = 0 (Ohms law)
+        # (2) Nodal eqns: Iin - sum(Iout) = 0 (Kirchoffs current law)
+        # (3) BC eqns: V = const (Direct assignment)
+
+        # Need to assign boundary conditions and count number of nodes, BCs
+        nBranch = len(self.branchList)
+        nSL = len(self.slList)
+        nNode = 0
+        nBC = 0
+        VNodeList = list()
+        for node in self.nodeList:
+            if node.isSL():
+                VNodeList.append(node)
+                nNode += 1
+            else:
+                if node.getType() == "Root":
+                    node.setPressure(Pin)
+                    VNodeList.append(node)
+                    nNode += 1
+                    nBC += 1
+                elif node.getType() == "Terminal":
+                    node.setPressure(Pout)
+                    VNodeList.append(node)
+                    nNode += 1
+                    nBC += 1
+                elif node.getType() == "Inlet" or node.getType() == "Outlet": # Furcation node
+                    VNodeList.append(node)
+                    nNode += 1
+
+        A = np.zeros((nBranch+nNode+nSL, nBranch+nNode+nSL))
+        b = np.zeros(nBranch+nNode+nSL)
+        # x = [branchList slList, nodeList]
+
+        # (1.1) Branch eqns: vdist - vprox - IR = 0 (Ohms law)
+        for i, branch in enumerate(self.branchList):
+            A[i,i] = -branch.getResistance()
+            A[i, VNodeList.index(branch.getProximal()) + nBranch + nSL] = 1
+            A[i, VNodeList.index(branch.getDistal()) + nBranch + nSL] = -1
+
+        # (1.2) SL eqns: vdist - vprox - IR = 0 (Ohms law)
+        j = nBranch
+        for sl in self.slList:
+            A[j,j] = -sl.getResistance()
+            A[j, VNodeList.index(sl.getProximal()) + nBranch + nSL] = 1
+            A[j, VNodeList.index(sl.getDistal()) + nBranch + nSL] = -1
+            j += 1
+
+        # (2) Nodal eqns: Iin - Iout1 - Iout2 = 0 (Kirchoffs current law)
+        k = nBranch + nSL
+        for branch in self.branchList:
+            if branch.isSL():
+                if branch.getType() == "Inlet":
+                    A[j, self.branchList.index(branch)] = 1
+                    # Find the matching SL
+                    sl = self.findSLByLoc(branch.getDistal().getLocation())
+                    A[j, nBranch + self.slList.index(sl)] = -1
+                else: # branch.getType() == "Outlet"
+                    A[j, self.branchList.index(branch)] = -1
+                    # Find the matching SL
+                    sl = self.findSLByLoc(branch.getProximal().getLocation())
+                    A[j, nBranch + self.slList.index(sl)] = 1
+                j += 1
+            else: # branch not SL
+                if branch.getType() == "Inlet":
+                    A[j, self.branchList.index(branch)] = 1
+                    for child in branch.getChildren():
+                        A[j, self.branchList.index(child)] = -1
+                else: # branch.getType() == "Outlet"
+                    A[j, self.branchList.index(branch)] = -1
+                    for parent in branch.getParents():
+                        A[j, self.branchList.index(parent)] = 1
+                j += 1
+
+        # (3) BC eqns
+        k = len(A) - nBC
+        for node in VNodeList:
+            if node.getType() == "Root" or node.getType() == "Terminal":
+                if not node.isSL():
+                    A[k, VNodeList.index(node) + nBranch + nSL] = 1
+                    b[k] = node.getPressure()
+                    k += 1
+
+        # Solve Ax = b
+        x = np.linalg.solve(A, b)
+
+        # Assign computed I and V values
+        for i, branch in enumerate(self.branchList):
+            branch.setFlowRate(x[i])
+
+        j = nBranch
+        for sl in self.slList:
+            sl.setFlowRate(x[j])
+            j += 1
+
+        k = nBranch + nSL
+        for node in VNodeList:
+            node.setPressure(x[k])
+            k += 1
+
+##### PRIMARY FUNCTIONS #####
+
+    def runSpaceColonization(self, initflag):
+        prevNodeCount = len(self.nodeList)
+        while self.numTargets() > 0:
+            # First find the node closest to each attractor
+            # Note: this is returned as a list with pointers to the closest nodes, 
+            # with None returned where there are no nodes within di
+            influencers = self.findClosestNode(initflag)
+            # Take the unique entries of the influencer list
+            growthNodes = list(set(influencers))
+            # If there is a None entry, remove it
+            if None in growthNodes:
+                growthNodes.remove(None)
+            # Now step through all of the nodes that the tree will be grown from
+            for growthNode in growthNodes:
+                # Get indices of attractors for the specific growthNode
+                activeAttractors = [i for i, node in enumerate(influencers) if node == growthNode]
+                # Check for case where there is only on attractor node, it is a target attractor, and within D distance
+                if len(activeAttractors) == 1 and self.attractorList[activeAttractors[0]].isTarget() and self.checkTargetDistance(activeAttractors[0], growthNode) < self.D:
+                    # Compute the direction to step in
+                    dir = self.attractorNormal(activeAttractors, growthNode)
+                    # What is the distance < D that we need to step to exactly reach the target
+                    D_exact = self.checkTargetDistance(activeAttractors[0], growthNode)
+                    # Add a *terminal* node in this direction at distance D_exact
+                    self.addSLNode(dir, D_exact, growthNode)
+                    # Flag this target attractor as killed
+                    self.attractorList[activeAttractors[0]].setKill()
+                else:
+                    # Compute direction to step in
+                    dir = self.attractorNormal(activeAttractors, growthNode)
+                    # Add node in this direction at distance D
+                    self.addNode(dir, growthNode, activeAttractors)
+            # Once all of the nodes have been added, we will kill any attractors within dk of
+            # existing nodes. Note: we cannot kill target attractors, unless they have been reached
+            self.killAttractors()
+            # Check to see if no steps were taken
+            nodeCount = len(self.nodeList)
+            if nodeCount == prevNodeCount:
+                output = 'Broken with ' + str(self.numTargets()) + ' targets not reached.'
+                print(output)
+                break
+            prevNodeCount = nodeCount
+
+    def reverseTree(self):
+        new = Colony(self.D, self.dk, self.di)
+        # Copy the nodes and branches over
+        for oldNode in self.nodeList:
+            new.nodeList.append(node.Node(oldNode.getLocation()))
+            new.nodeList[-1].setSL(oldNode.isSL())
+        for oldBranch in self.branchList:
+            # Make sure to assign the (reversed) prox/dist nodes from the new tree
+            new.branchList.append(branch.Branch(new.findNodeByLoc(oldBranch.getDistal().getLocation()), new.findNodeByLoc(oldBranch.getProximal().getLocation())))
+            # Carry over the branch radius, and resistance
+            new.branchList[-1].setRadius(oldBranch.getRadius())
+            new.branchList[-1].setResistance(oldBranch.getResistance())
+        # Add parent child relationships for the new nodes
+        for i, oldNode in enumerate(self.nodeList):
+            for parent in oldNode.getParents():
+                new.nodeList[i].setChild(new.findNodeByLoc(parent.getLocation()))
+            for child in oldNode.getChildren():
+                new.nodeList[i].setParent(new.findNodeByLoc(child.getLocation()))
+        # Make sure to set the branch type again after the nodes have had their parents and children assigned
+        for bran in new.branchList:
+            bran.setType()
+        # Add parent child relationships for new branches
+        for i, oldBranch in enumerate(self.branchList):
+            for parent in oldBranch.getParents():
+                new.branchList[i].setChild(new.findBranchByLoc(parent.getDistal(), parent.getProximal()))
+            for child in oldBranch.getChildren():
+                new.branchList[i].setParent(new.findBranchByLoc(child.getDistal(), child.getProximal()))
+        # Return the reversed tree
+        return new
+
+##### HELPER FUNCTIONS #####
+
+    def addAttractors(self, targets, attractors):
+        # Clear the list just to be safe
+        self.attractorList = list()
         # Add all the target attractors to the attractorList
         for i in range(len(targets)):
             self.attractorList.append(attractor.Attractor(targets[i,:], True))
         # Add all the regular attractors to the attractorList
         for i in range(len(attractors)):
             self.attractorList.append(attractor.Attractor(attractors[i,:], False))
-        # Add the root node if there is one
-        if root is not None:
-            self.nodeList.append(node.Node(root, type))
 
     def getLocationArray(self, inputList):
-        # Returns np array with euclidean coordinates of input list (attractors, nodes, etc.)
+        # Returns np array with Euclidean coordinates of input list (attractors, nodes, etc.)
         arr = np.zeros((len(inputList),3))
         for i in range(len(inputList)):
             arr[i,:] = inputList[i].getLocation()
@@ -52,7 +269,7 @@ class Colony:
         # If we are growing the tree from initialized tree, we also dont want to grow from the root node (initflag serves this purpose)
         arr = self.getLocationArray(self.nodeList)
         for i in range(len(self.nodeList)):
-            if self.nodeList[i].isTerminal():
+            if self.nodeList[i].isSL():
                 arr[i,:] = np.full((3,), np.inf)
             elif not initflag and self.nodeList[i].isRoot():
                 arr[i,:] = np.full((3,), np.inf)
@@ -61,13 +278,13 @@ class Colony:
     def numTargets(self):
         # Counts the number or target attractors in attractorList
         ct = 0
-        for i in range(len(self.attractorList)):
-            if self.attractorList[i].isTarget():
+        for att in self.attractorList:
+            if att.isTarget():
                 ct += 1
         return ct
 
     def computeDistanceVec(self,arr,pt):
-        # Computes the euclidean distance between pt and every point in arr
+        # Computes the Euclidean distance between pt and every point in arr
         return np.linalg.norm(arr - pt, axis = 1)
 
     def findClosestNode(self, initflag):
@@ -75,8 +292,8 @@ class Colony:
         # permitting that the attractor is within the sphere of influence, di. Otherwise return None
         nodeArr = self.getNodeArray(initflag)
         closestNode = list()
-        for i in range(len(self.attractorList)):
-            dist = self.computeDistanceVec(nodeArr, self.attractorList[i].getLocation())
+        for att in self.attractorList:
+            dist = self.computeDistanceVec(nodeArr, att.getLocation())
             if min(dist) < self.di:
                 closestNode.append(self.nodeList[np.argmin(dist)])
             else:
@@ -92,7 +309,7 @@ class Colony:
         # Compute mean of all unit normals
         meanNormal = np.mean(attractorNormals, axis = 0)
         # If the computed step normal is zero, randomly step towards one of the normals
-        # This was an edge case where the algorithm would get stuck between two attractors 
+        # This is edge case 1 where the algorithm would get stuck between two attractors 
         # and the computed normal would be zero and effectively no step was taken
         if np.linalg.norm(meanNormal) < 1e-6:
             return attractorNormals[np.random.choice(range(len(attractorNormals)))]
@@ -111,24 +328,26 @@ class Colony:
     def addNode(self, dir, growthNode, activeAttractors):
         # Add a node in direction dir, D distance from node
         loc = growthNode.getLocation() + dir * self.D
+        # Check for edge case 2 where the step taken is identical to previous and too far past the attractors
         if self.repeatedStepCheck(loc, growthNode):
-            # Instead step directly between the two targets (assuming dir < D)
-            modifiedLoc = np.array([0., 0., 0.])
-            for curattractor in activeAttractors:
-                modifiedLoc += self.attractorList[curattractor].getLocation()
+            # print("REPEATED STEP, Num Attractors: ", len(activeAttractors))
+            modifiedLoc = np.zeros((3,))
+            for att in activeAttractors:
+                modifiedLoc += self.attractorList[att].getLocation()
             modifiedLoc /= len(activeAttractors)
-            if np.linalg.norm(modifiedLoc - growthNode.getLocation()) < self.D:
+            if np.linalg.norm(growthNode.getLocation() - modifiedLoc) < self.D:
                 loc = modifiedLoc
-            else:
-                RuntimeError("Edge Case 2 Error")
-        self.nodeList.append(node.Node(loc, self.type, parent = growthNode))
+        self.nodeList.append(node.Node(loc))
+        self.nodeList[-1].setParent(growthNode)
         # Also update parent node to have this new node as its child
         growthNode.setChild(self.nodeList[-1])
 
-    def addTerminalNode(self, dir, D_exact, growthNode):
-        # Add a *terminal* node in direction dir, D_exact distance from node
+    def addSLNode(self, dir, D_exact, growthNode):
+        # Add a SL node in direction dir, D_exact distance from node
         loc = growthNode.getLocation() + dir * D_exact
-        self.nodeList.append(node.Node(loc, self.type, parent = growthNode, terminal = True))
+        self.nodeList.append(node.Node(loc))
+        self.nodeList[-1].setParent(growthNode)
+        self.nodeList[-1].setSL(True)
         # Also update parent node to have this new node as its child
         growthNode.setChild(self.nodeList[-1])
 
@@ -152,65 +371,38 @@ class Colony:
         for att in killList:
             self.attractorList.remove(att)
 
-    def createTree(self, initflag):
-        prevNodeCount = len(self.nodeList)
-        loop = 0
-        while self.numTargets() > 0:
-            # First find the node closest to each attractor
-            # Note: this is returned as a list with pointers to the closest nodes, 
-            # with None returned where there are no nodes within di
-            influencers = self.findClosestNode(initflag)
-            # Take the unique entries of the influencer list
-            growthNodes = list(set(influencers))
-            # If there is a None entry, remove it
-            if None in growthNodes:
-                growthNodes.remove(None)
-            # Now step through all of the nodes that the tree will be grown from
-            for growthNode in growthNodes:
-                # Get indices of attractors for the specific growthNode
-                activeAttractors = [i for i, node in enumerate(influencers) if node == growthNode]
-                # Check for case where there is only on attractor node, it is a target attractor, and within D distance
-                if len(activeAttractors) == 1 and self.attractorList[activeAttractors[0]].isTarget() and self.checkTargetDistance(activeAttractors[0], growthNode) < self.D:
-                    # Compute the direction to step in
-                    dir = self.attractorNormal(activeAttractors, growthNode)
-                    # What is the distance < D that we need to step to exactly reach the target
-                    D_exact = self.checkTargetDistance(activeAttractors[0], growthNode)
-                    # Add a *terminal* node in this direction at distance D_exact
-                    self.addTerminalNode(dir, D_exact, growthNode)
-                    # Flag this target attractor as killed
-                    self.attractorList[activeAttractors[0]].setKill()
-                else:
-                    # Compute direction to step in
-                    dir = self.attractorNormal(activeAttractors, growthNode)
-                    # Add node in this direction at distance D
-                    self.addNode(dir, growthNode, activeAttractors)
-            # Once all of the nodes have been added, we will kill any attractors within dk of
-            # existing nodes. Note: we cannot kill target attractors, unless they have been reached
-            self.killAttractors()
-            # Check to see if no steps were taken
-            nodeCount = len(self.nodeList)
-            if nodeCount == prevNodeCount:
-                output = 'Broken with ' + str(self.numTargets()) + ' targets not reached.'
-                print(output)
-                break
-            prevNodeCount = nodeCount
-            loop += 1
+    def trimNodes(self):
+        criticalNodes = list()
+        for curNode in self.nodeList:
+            if curNode.isSL():
+                criticalNodes.append(curNode)
+                while curNode.getParents():
+                    curNode = curNode.getParents()[0]
+                    criticalNodes.append(curNode)
+        # Remove the nodes not in criticalNodes list
+        for node in reversed(self.nodeList):
+            if criticalNodes.count(node) < 1:
+                self.removeNode(node)
+
+    def removeNode(self, node):
+        # Remove the node
+        self.nodeList.remove(node)
+        # Also remove node from parents child list
+        node.getParents()[0].removeChild(node)
 
     def createBranches(self):
         # Will create branches by taking all of the distal nodes in the tree
         # These will either be leaf nodes, or furcation ndoes
         distList = list()
-        # Leaf nodes have 0 children, furcation nodes have > 1 child
         for node in self.nodeList:
-            nChildren = len(node.getChildren())
-            if nChildren == 0 or nChildren > 1 and len(node.getParents()) > 0:
+            if node.getType() == "Terminal" or node.getType() == "Inlet":
                 distList.append(node)
         # From the distal list we can traverse each branch backwards until we reach 
         # a node with multiple children, or no parent in the case of the root branch
         for node in distList:
             prox, dist = self.traverseBranch(node)
-            self.branchList.append(branch.Branch(self.type, prox, dist))
-        # Now assign parent - child relationships
+            self.branchList.append(branch.Branch(prox, dist))
+        # Need to assign parent - child relationships between branches
         for bran in self.branchList:
             parent = self.findParentBranch(bran)
             # Assign to both
@@ -218,14 +410,12 @@ class Colony:
                 bran.setParent(parent)
                 parent.setChild(bran)
             elif not bran.isRoot():
-                print('flag')
+                raise RuntimeError("Cannot find parent branch for non-root branch")
 
     def traverseBranch(self, endNode):
-        # From the distal list we can traverse each branch backwards until we reach 
-        # a node with multiple children, or no parent in the case of the root branch
         dist = endNode
         curNode = endNode.getParents()[0]
-        while len(curNode.getChildren()) < 2 and len(curNode.getParents()) > 0:
+        while curNode.getType() == "Interior":
             curNode = curNode.getParents()[0]
         prox = curNode
         return prox, dist
@@ -238,25 +428,6 @@ class Colony:
             if bran.getDistal() == prox:
                 return bran
 
-    def trimNodes(self):
-        criticalNodes = list()
-        for curNode in self.nodeList:
-            if curNode.isTerminal():
-                criticalNodes.append(curNode)
-                while len(curNode.getParents()) > 0:
-                    curNode = curNode.getParents()[0]
-                    criticalNodes.append(curNode)
-        # Remove the nodes not in criticalNodes list
-        for node in reversed(self.nodeList):
-            if criticalNodes.count(node) < 1:
-                self.removeNode(node)
-
-    def removeNode(self, node):
-        # Remove the node
-        self.nodeList.remove(node)
-        # Also remove node from parents child list
-        node.getParents()[0].removeChild(node) 
-    
     def countTerminals(self, branch):
         count = 0
         for curBranch in self.branchList:
@@ -275,8 +446,8 @@ class Colony:
         self.branchList[0].setRadius(initial)
         # Set the subsequent radii
         for i in range(1,len(self.branchList)):
-            if len(self.branchList[i].getParents()) == 0:
-                print('Err')
+            if not self.branchList[i].getParents():
+                raise RuntimeError('Non root branch has no parents')
             ratio = self.countTerminals(self.branchList[i])/self.countTerminals(self.branchList[i].getParents()[0])
             self.branchList[i].setRadius(np.sqrt(ratio * self.branchList[i].getParents()[0].getRadius()**2))
 
@@ -289,12 +460,6 @@ class Colony:
             curNode = curNode.getParents()[0]
         return length
 
-    def setBranchVolume(self):
-        for branch in self.branchList:
-            rad = branch.getRadius()
-            length = self.branchLength(branch)
-            branch.setVolume(np.pi * rad**2 * length)
-
     def setResistance(self, mu):
         # Convert mu from centipoise to dyn-s/cm^2
         mu = mu * 0.01
@@ -303,102 +468,11 @@ class Colony:
             R = (8 * mu * L) / (np.pi * branch.getRadius()**4)
             branch.setResistance(R)
 
-    def solveResistanceNetwork(self, Pin, Pout):
-        # Build square A matrix to solve linear system Ax = b
-        # x is the all of the branchwise flow rates and nodal pressures, concatenated into one vector
-        # A will be comprised of three types of equations
-        # (1) Branch eqns: Vdist - Vprox - IR = 0 (Ohms law)
-        # (2) Nodal eqns: Iin - sum(Iout) = 0 (Kirchoffs current law)
-        # (3) BC eqns: V = const (Direct assignment)
-        
-        # Need to assign necessary boundary conditions. Input pressure, output pressure
-        nBranch = len(self.branchList)
-        nNode = 0
-        nBC = 0
-        VNodeList = list()
-        for node in self.nodeList:
-            if node.isRoot():
-                node.setPressure(Pin)
-                VNodeList.append(node)
-                nNode += 1
-                nBC += 1
-            elif node.isTerminal():
-                node.setPressure(Pout)
-                VNodeList.append(node)
-                nNode += 1
-                nBC += 1
-            elif node.isFurcation():
-                VNodeList.append(node)
-                nNode += 1
-
-        A = np.zeros((nBranch+nNode, nBranch+nNode))
-        b = np.zeros(nBranch+nNode)
-        # x = [branchList, nodeList]
-
-        # (1) Branch eqns: vdist - vprox - IR = 0 (Ohms law)
-        for i, branch in enumerate(self.branchList):
-            A[i,i] = -branch.getResistance()
-            A[i, VNodeList.index(branch.getProximal()) + nBranch] = 1
-            A[i, VNodeList.index(branch.getDistal()) + nBranch] = -1
-
-        # (2) Nodal eqns: Iin - Iout1 - Iout2 = 0 (Kirchoffs current law)
-        j = nBranch
+    def setBranchVolume(self):
         for branch in self.branchList:
-            if not branch.isTerminal():
-                A[j, self.branchList.index(branch)] = 1
-                for child in branch.getChildren():
-                    A[j, self.branchList.index(child)] = -1
-                j += 1
-
-        # (3) BC eqns
-        k = len(A) - nBC
-        for node in VNodeList:
-            if node.isRoot() or node.isTerminal():
-                A[k, VNodeList.index(node) + nBranch] = 1
-                b[k] = node.getPressure()
-                k += 1
-
-        # Solve Ax = b
-        x = np.linalg.solve(A, b)
-
-        # Assign computed I and V values
-        for i, branch in enumerate(self.branchList):
-            branch.setFlowRate(x[i])
-
-        j = nBranch
-        for node in VNodeList:
-            node.setPressure(x[j])
-            j += 1
-
-    def findNodeByLoc(self, oldNode):
-        eps = 1e-10
-        loc = oldNode.getLocation()
-        for curnode in self.nodeList:
-            if np.linalg.norm(loc- curnode.getLocation()) < eps:
-                return curnode
-
-    def findBranchByLoc(self, oldBranch):
-        eps = 1e-10
-        oldDistLoc = oldBranch.getDistal().getLocation()
-        oldProxLoc = oldBranch.getProximal().getLocation()
-        # Find the a branch with a matching proximal node to the old distal node
-        for curbranch in self.branchList:
-            if (np.linalg.norm(oldDistLoc - curbranch.getProximal().getLocation()) < eps) and (np.linalg.norm(oldProxLoc - curbranch.getDistal().getLocation()) < eps):
-                return curbranch
-
-    def findMatchingNode(self, node):
-        eps = 1e-6
-        for branch in self.branchList:
-            if branch.getDistal().isTerminal():
-                if np.linalg.norm(node.getLocation() - branch.getDistal().getLocation()) < eps:
-                    return branch.getDistal()
-
-    def findMatchingBranch(self, branch):
-        eps = 1e-6
-        for bran in self.branchList:
-            if bran.getDistal().isTerminal():
-                if np.linalg.norm(bran.getDistal().getLocation() - branch.getDistal().getLocation()) < eps:
-                    return bran
+            rad = branch.getRadius()
+            length = self.branchLength(branch)
+            branch.setVolume(np.pi * rad**2 * length)
 
     def percentFull(self):
         fluid = 0
@@ -421,185 +495,26 @@ class Colony:
             length += self.branchLength(branch)
         return length
 
-    def fillStep(self, dt):
-        # Start with root branch
-        V = self.branchList[0].getFlowRate()*dt
-        self.branchList[0].addFluid(V)
-        # Now step through all the branches and move around the excess fluid
+    def findNodeByLoc(self, loc):
+        eps = 1e-6
+        for node in self.nodeList:
+            if np.linalg.norm(node.getLocation() - loc) < eps:
+                return node
+
+    def findBranchByLoc(self, prox, dist):
+        eps = 1e-6
+        proxLoc = prox.getLocation()
+        distLoc = dist.getLocation()
         for branch in self.branchList:
-            # If the branch has excess fluid and isnt terminal, transfer to its children
-            if branch.getBuffer() > 0 and not branch.isTerminal():
-                Q = branch.getFlowRate()
-                # For each child give its corresponding amount of excess fluid based on proportion of total flow rate
-                for child in branch.getChildren():
-                    ratio = child.getFlowRate() / Q
-                    child.addFluid(branch.getBuffer() * ratio)
-                # Zero out the buffer from the parent branch
-                branch.setBuffer(0)
-            else:
-                # Otherwise can just zero the buffer on the terminal nodes
-                branch.setBuffer(0)
-        
-    def fillNetwork(self, dt):
-        # Assign volumes
-        self.setBranchVolume()
-        with imageio.get_writer('filling.gif', mode  = 'I') as writer:
-            # Begin iteration
-            time = 0
-            plotter.plotFilling(self, time)
-            image = imageio.imread('fill_%.2f.png' %time)
-            writer.append_data(image)
-            os.remove('fill_%.2f.png' %time)
-            while self.percentFull() < 1:
-                self.fillStep(dt)
-                time += dt
-                plotter.plotFilling(self, time)
-                image = imageio.imread('fill_%.2f.png' %time)
-                writer.append_data(image)
-                os.remove('fill_%.2f.png' %time)
+            if np.linalg.norm(branch.getProximal().getLocation() - proxLoc) < eps and np.linalg.norm(branch.getDistal().getLocation() - distLoc) < eps:
+                return branch
 
-    def addSL(self, loc, parent, child):
-        # Add the SL to slList. Default R = 0
-        self.slList.append(superlobule.SuperLobule(loc, parent, child, R = 0))
-        # Also connect the parent and children nodes
-        parent.addChild(child)
-        child.addParent(parent)
-  
-def solveResistanceNetwork2x(inlet, outlet, Pin, Pout):
-        nBranchIn = len(inlet.branchList); nBranchOut = len(outlet.branchList)
-        nNode = 0
-        nBC = 0
-        VNodeList = list()
-        for node in inlet.nodeList:
-            if node.isRoot():
-                node.setPressure(Pin)
-                VNodeList.append(node)
-                nNode += 1
-                nBC += 1
-            elif node.isFurcation() or node.isTerminal():
-                VNodeList.append(node)
-                nNode += 1
-        for node in outlet.nodeList:
-            if node.isRoot():
-                node.setPressure(Pout)
-                VNodeList.append(node)
-                nNode += 1
-                nBC += 1
-            elif node.isFurcation():
-                VNodeList.append(node)
-                nNode += 1
+    def findSLByLoc(self, loc):
+        eps = 1e-6
+        for sl in self.slList:
+            if np.linalg.norm(sl.getLocation() - loc) < eps:
+                return sl
 
-        nBranch = nBranchIn + nBranchOut
-        
-        A = np.zeros((nBranch+nNode, nBranch+nNode))
-        b = np.zeros(nBranch+nNode)
-        # x = [branchList, nodeList]
-
-        # (1) Branch eqns: vdist - vprox - IR = 0 (Ohms law)
-        for i, branch in enumerate(inlet.branchList):
-            A[i,i] = -branch.getResistance()
-            A[i, VNodeList.index(branch.getProximal()) + nBranch] = 1
-            A[i, VNodeList.index(branch.getDistal()) + nBranch] = -1
-
-        j = nBranchIn
-        for branch in outlet.branchList:
-            A[j,j] = -branch.getResistance()
-            # Reverse signs for outlet tree since direction is reversed
-            A[j, VNodeList.index(branch.getProximal()) + nBranch] = -1
-            if branch.isTerminal():
-                node = inlet.findMatchingNode(branch.getDistal())
-                A[j, VNodeList.index(node) + nBranch] = 1
-            else:
-                A[j, VNodeList.index(branch.getDistal()) + nBranch] = 1
-            j += 1
-
-        # (2) Nodal eqns: sum(Iin) - sum(Iout) = 0 (Kirchoffs current law)
-        k = nBranch
-        for branch in inlet.branchList:
-            # Normal branches
-            if not branch.isTerminal():
-                A[k, inlet.branchList.index(branch)] = 1
-                for child in branch.getChildren():
-                    A[k, inlet.branchList.index(child)] = -1
-                k += 1
-            # Terminal branches
-            if branch.isTerminal():
-                # Find branch in outlet that matches distal node
-                A[k, inlet.branchList.index(branch)] = 1
-                bran = outlet.findMatchingBranch(branch)
-                A[k, outlet.branchList.index(bran) + nBranchIn] = -1
-                k += 1
-        for branch in outlet.branchList:
-            if not branch.isTerminal():
-                # Reverse signs for outlet tree since direction is reversed
-                A[k, outlet.branchList.index(branch) + nBranchIn] = -1
-                for child in branch.getChildren():
-                    A[k, outlet.branchList.index(child) + nBranchIn] = 1
-                k += 1
-
-        # (3) BC eqns
-        l = len(A) - nBC
-        for node in VNodeList:
-            if node.isRoot():
-                A[l, VNodeList.index(node) + nBranch] = 1
-                b[l] = node.getPressure()
-                l += 1
-
-        # Solve Ax = b
-        x = np.linalg.solve(A, b)
-
-        # Assign computed I and V values
-        for i, branch in enumerate(inlet.branchList):
-            branch.setFlowRate(x[i])
-        
-        j = nBranchIn
-        for branch in outlet.branchList:
-            branch.setFlowRate(x[j])
-            j += 1
-
-        k = nBranch
-        for node in VNodeList:
-            node.setPressure(x[k])
-            k += 1
-
-def reverseColony(col):
-    # Takes inlet colony and reverses to be outlet tree
-    new = Colony(col.D, col.dk, col.di, "Outlet")
-    # Step through all the nodes and reverse their parent and child lists
-    for curnode in col.nodeList:
-        new.nodeList.append(node.Node(curnode.getLocation(), "Outlet"))
-        if curnode.isRoot():
-            new.nodeList[-1].setTerminal(True)
-    for i, curnode in enumerate(new.nodeList):
-        for parent in col.nodeList[i].getParents():
-            newParent = new.findNodeByLoc(parent)
-            curnode.setChild(newParent)
-        for child in col.nodeList[i].getChildren():
-            newChild = new.findNodeByLoc(child)
-            curnode.setParent(newChild)
-    # Step through all the branches and reverse their prox/distal nodes, and parent child lists
-    for curbranch in col.branchList:
-        # Reverse prox/dist nodes
-        new.branchList.append(branch.Branch("Outlet", prox = new.findNodeByLoc(curbranch.getDistal()), dist = new.findNodeByLoc(curbranch.getProximal())))
-    for i, curbranch in enumerate(new.branchList):
-        # Reverse parent and child lists
-        for oldParent in col.branchList[i].getParents():
-            curbranch.setChild(new.findBranchByLoc(oldParent))
-        for oldChild in col.branchList[i].getChildren():
-            curbranch.setParent(new.findBranchByLoc(oldChild))
-    return new
-
-def matchingTerminal(inTerm, outCol):
-    # Takes a terminal from inlet tree and finds the correesponding terminal from the outlet tree
-    eps = 1e-10
-    inLoc = inTerm.getLocation()
-    for branch in outCol.branchList:
-        # Just look at the root branches in the outlet colony tree
-        if branch.isRoot():
-            # If the locations are identical, return the matching node
-            if np.linalg.norm(branch.getProximal().getLocation() - inLoc) < eps:
-                return branch.getProximal()
-
-def joinTrees(inlet, outlet):
-    # Combines inlet and (already reversed) outlet colonies into a single colony, with super lobules in between
-    new = Colony(inlet.D, inlet.dk, inlet.di, type = "", )
+    def setRSL(self, value):
+        for sl in self.slList:
+            sl.setResistance(value)

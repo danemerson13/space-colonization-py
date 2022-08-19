@@ -1,21 +1,26 @@
 class Branch:
     # Properties of a branch
-    # type = {"Inlet", "Outlet"}
     # proximal: type = Node
     # distal: type = Node
-    # parent: type = list(Branch)
+    # parents: type = list(Branch)
     # children: type = list(Branch)
+    # type: type = string. "Root", "Terminal", "Inlet", "Outlet", None
     # radius: type = double
     # resistance: type = double
     # flowrate: type = double
-    # generation: type = int
+    # volume: type = double
+    # fluid: type = double
+    # buffer: type = double
 
-    def __init__(self, type, prox, dist):
-        self.type = type
+
+    def __init__(self, prox, dist):
         self.proximal = prox
         self.distal = dist
         self.parents = list()
         self.children = list()
+        self.type = None
+
+        self.setType()
 
         self.radius = None
         self.resistance = None
@@ -24,11 +29,16 @@ class Branch:
         self.fluid = 0
         self.buffer = 0
 
+    def setProximal(self, prox):
+        self.proximal = prox
+        self.setType()
+
     def getProximal(self):
         return self.proximal
 
     def setDistal(self, dist):
         self.distal = dist
+        self.setType()
 
     def getDistal(self):
         return self.distal
@@ -51,11 +61,16 @@ class Branch:
     def removeChild(self, child):
         self.children.remove(child)
 
-    def isRoot(self):
-        return self.getProximal().isRoot()
+    def setType(self):
+        if self.getProximal().getType() == "Inlet" or self.getDistal().getType() == "Inlet":
+            self.type = "Inlet"
+        elif self.getProximal().getType() == "Outlet" or self.getDistal().getType() == "Outlet":
+            self.type = "Outlet"
+        else:
+            self.type = None
 
-    def isTerminal(self):
-        return self.getDistal().isTerminal()
+    def getType(self):
+        return self.type
 
     def setRadius(self, rad):
         self.radius = rad
@@ -91,11 +106,31 @@ class Branch:
     def getFluid(self):
         return self.fluid
 
-    def percentFull(self):
-        return self.getFluid()/self.getVolume()
-
     def setBuffer(self, V):
         self.buffer = V
 
     def getBuffer(self):
         return self.buffer
+
+##### UTILITY FUNCTIONS #####
+
+    def isRoot(self):
+        if self.getProximal().getType() == "Root" or self.getDistal().getType() == "Root":
+            return True
+        else:
+            return False
+
+    def isTerminal(self):
+        if self.getProximal().getType() == "Terminal" or self.getDistal().getType() == "Terminal":
+            return True
+        else:
+            return False
+
+    def isSL(self):
+        if self.getProximal().isSL() or self.getDistal().isSL():
+            return True
+        else:
+            return False
+
+    def percentFull(self):
+        return self.getFluid()/self.getVolume()
