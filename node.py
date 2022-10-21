@@ -1,51 +1,69 @@
 class Node:
     # Properties of a node:
     # location: type = 3x1 double array
-    # parent: type = Node. If none, then root
-    # children: type = list(Node). If none - terminal, if more than one - furcation
+    # parents: type = list(Node).
+    # children: type = list(Node).
+    # type: type = string. "Interior", "Inlet", "Outlet", "Root", "Terminal", None
+    # sl: type = boolean. True if superlobule exists at this node
     # pressure: type = double
     # current: type = double
 
-    def __init__(self, loc, parent = None, terminal = False):
+    def __init__(self, loc):
         self.location = loc
-        self.parent = parent
-        self.terminal = terminal
+        self.parents = list()
         self.children = list()
+        self.type = None
+        self.sl = False
         self.pressure = None
         self.current = None
 
     def getLocation(self):
         return self.location
 
-    def getParent(self):
-        return self.parent
+    def setParent(self, parent):
+        self.parents.append(parent)
+        self.setType()
+
+    def getParents(self):
+        return self.parents
+
+    def removeParent(self, parent):
+        self.parents.remove(parent)
+        self.setType()
 
     def setChild(self, child):
         self.children.append(child)
-
+        self.setType()
+            
     def getChildren(self):
         return self.children
 
     def removeChild(self, child):
         self.children.remove(child)
+        self.setType()
 
-    def isRoot(self):
-        if self.parent == None:
-            return True
+    def setType(self):
+        if len(self.parents) == 1 and len(self.children) == 1:
+            self.type = "Interior"
+        elif len(self.parents) == 1 and len(self.children) > 1:
+            self.type = "Inlet"
+        elif len(self.parents)  > 1 and len(self.children) == 1:
+            self.type = "Outlet"
+        elif len(self.parents) == 0 and len(self.children) > 0:
+            self.type = "Root"
+        elif len(self.parents) > 0 and len(self.children) == 0:
+            self.type = "Terminal"
         else:
-            return False
+            self.type = None
 
-    def setTerminal(self, flag):
-        self.terminal = flag
+    def getType(self):
+        return self.type
 
-    def isTerminal(self):
-        return self.terminal
-
-    def isFurcation(self):
-        if len(self.children) > 1:
-            return True
-        else:
-            return False
+    def setSL(self, bool):
+        self.sl = bool
+    
+    def isSL(self):
+        return self.sl
 
     def setPressure(self, P):
         self.pressure = P
@@ -58,3 +76,13 @@ class Node:
 
     def getCurrent(self):
         return self.current
+
+##### UTILITY FUNCTIONS #####
+
+    def isRoot(self):
+        return self.type == "Root"
+
+    def isFurcation(self):
+        return self.type == "Terminal"
+
+    
