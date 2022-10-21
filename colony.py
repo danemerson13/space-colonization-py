@@ -2,6 +2,7 @@ import attractor, node, branch, superlobule
 import numpy as np
 import plotter
 import imageio, os
+import time
 
 class Colony:
     def __init__(self, D, dk, di, ):
@@ -55,7 +56,16 @@ class Colony:
         # Find matching SL nodes between trees and place a SL to join them
         for branch in self.branchList:
             if branch.isTerminal():
-                self.slList.append(superlobule.SuperLobule(branch.getDistal().getLocation(), branch.getDistal(), outTree.findNodeByLoc(branch.getDistal().getLocation())))
+                prox = branch.getDistal()
+                dist = outTree.findNodeByLoc(branch.getDistal().getLocation())
+                self.slList.append(superlobule.SuperLobule(branch.getDistal().getLocation(), prox, dist))
+                # Pair the nodes from the inlet and outlet trees together
+                prox.setChild(dist)
+                dist.setParent(prox)
+                # Pair the branches from the inlet and outlet trees together
+                distBranch = outTree.findChildBranchCrossTree(branch)
+                branch.setChild(distBranch)
+                distBranch.setParent(branch)
 
         # Add the nodes and branches from the outlet tree
         for node in outTree.nodeList:
@@ -64,6 +74,9 @@ class Colony:
             self.branchList.append(branch)
 
     def solveResistanceNetwork(self, Pin, Pout):
+        # Convert Pressure from mmHg to dyn/mm^2
+        Pin = Pin * 13.3322
+
         # Build square A matrix to solve linear system Ax = b
         # x is the all of the branchwise flow rates and nodal pressures, concatenated into one vector
         # A will be comprised of three types of equations
@@ -100,13 +113,13 @@ class Colony:
         b = np.zeros(nBranch+nNode+nSL)
         # x = [branchList slList, nodeList]
 
-        # (1.1) Branch eqns: vdist - vprox - IR = 0 (Ohms law)
+        # (1.1) Branch eqns: vprox - vdist - IR = 0 (Ohms law)
         for i, branch in enumerate(self.branchList):
             A[i,i] = -branch.getResistance()
             A[i, VNodeList.index(branch.getProximal()) + nBranch + nSL] = 1
             A[i, VNodeList.index(branch.getDistal()) + nBranch + nSL] = -1
 
-        # (1.2) SL eqns: vdist - vprox - IR = 0 (Ohms law)
+        # (1.2) SL eqns: vprox - vdist - IR = 0 (Ohms law)
         j = nBranch
         for sl in self.slList:
             A[j,j] = -sl.getResistance()
@@ -165,6 +178,70 @@ class Colony:
         for node in VNodeList:
             node.setPressure(x[k])
             k += 1
+
+    def solveRSL(self, Qactual, Pin, Pout, n_iter, tol, verbal, a = 0, b = 1e-4):
+        # Solves for RSL value via bisection method with brackets a and b initialized such that f(a) * f(b) < 0, 
+        # terminating when Qi is within tol of Qactual, 
+        # or after iter iterations
+
+        # verbal = 0: print nothing
+        # verbal = 1: print final RSL, iter, tol
+        # verbal = 2: print 1, and starting bounds
+        # verbal = 3: print 2, and RSL and tol at each iter
+
+        start = time.time()
+
+        # Convert Qactual from mL/min to mm^3/s
+        Qactual = Qactual * 50/3 # Same as Qact * 16.6666
+
+        # First need to find brackets a,b for which Q(a) and Q(b) lie on opposite sides of Qactual
+        a = a; Qa, _ = self.queryQin(a, Pin, Pout)
+        b = b; Qb, _ = self.queryQin(b, Pin, Pout)
+        while (Qa - Qactual) * (Qb - Qactual) >= 0:
+            b *= 10
+            Qb, _ = self.queryQin(b, Pin, Pout)
+        if verbal >= 2:
+            print("Starting bisection method with initial bounds {%d, %d}" %(a, b))
+
+        # Save the Req for RSL = 0
+        Req = (Pin - Pout)/Qa
+
+        # Now iterate until tolerance is met or n_iter is broken
+        t_list = list()
+        c = (a+b)/2
+        Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
+        iter = 0
+        while np.abs(Qactual - Qc)/Qactual > tol and iter < n_iter:
+            if verbal >= 3:
+                print("Iter: %d, RSL = %.2f, Tolerance: %.2E" %(iter, c, np.abs(Qactual - Qc)/Qactual))
+            # Bisection Method logic
+            if (Qa - Qactual) * (Qc - Qactual) < 0:
+                b = c
+                Qb = Qc
+            else:
+                a = c
+                Qa = Qc
+            # Update c
+            c = (a+b)/2
+            Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
+            # Update counter
+            iter += 1
+
+        end = time.time()
+        elapsed = end - start
+        avg_mat_solve = np.mean(t_list)
+
+        if iter >= n_iter:
+            print("DID NOT CONVERGE - Method terminated after %d iterations with RSL = %.2f and a tolerance of %.2E" %(iter, c, np.abs(Qactual - Qc)/Qactual))
+        else:
+            if verbal >= 1:
+                nBranch, nNode, nSL = self.getRNetworkDims()
+                # print("Solution converged to RSL = %.2f dyn-s/mm^5, Q(RSL) = %.2f mL/min, after %d iterations to a tolerance of %.2E" %(c, Qc * 3/50, iter, np.abs(Qactual - Qc)/Qactual))
+                print("Solution for %d SL converged to RSL = %.2f dyn-s/mm^5, after %d iterations and %.2f secs to a tolerance of %.2E, Matrix Dim: %d x %d, nBranch: %d, nNode: %d, nSL: %d, Avg Matrix Solve %.2E" %(len(self.slList), c, iter, elapsed, np.abs(Qactual - Qc)/Qactual, nBranch+nNode+nSL, nBranch+nNode+nSL, nBranch, nNode, nSL, avg_mat_solve))
+        # Check for backflow
+        self.flowCheck()
+        # Return the RSL from bisection method
+        return c
 
 ##### PRIMARY FUNCTIONS #####
 
@@ -239,6 +316,24 @@ class Colony:
                 new.branchList[i].setParent(new.findBranchByLoc(child.getDistal(), child.getProximal()))
         # Return the reversed tree
         return new
+        
+    def fillNetwork(self, dt):
+        # Assign volumes
+        self.setBranchVolume()
+        with imageio.get_writer('filling.gif', mode  = 'I') as writer:
+            # Begin iteration
+            time = 0
+            plotter.plotFilling(self, time)
+            image = imageio.imread('fill_%.2f.png' %time)
+            writer.append_data(image)
+            os.remove('fill_%.2f.png' %time)
+            while self.percentFull() < 1:
+                self.fillStep(dt)
+                time += dt
+                plotter.plotFilling(self, time)
+                image = imageio.imread('fill_%.2f.png' %time)
+                writer.append_data(image)
+                os.remove('fill_%.2f.png' %time)
 
 ##### HELPER FUNCTIONS #####
 
@@ -428,6 +523,14 @@ class Colony:
             if bran.getDistal() == prox:
                 return bran
 
+    def findChildBranchCrossTree(self, parentBranch):
+        # Find the branch in branchList where the distal node of the parent 
+        # branch matches the proximal node of the child branch from another tree
+        dist = self.findNodeByLoc(parentBranch.getDistal().getLocation())
+        for bran in self.branchList:
+            if bran.getProximal() == dist:
+                return bran
+
     def countTerminals(self, branch):
         count = 0
         for curBranch in self.branchList:
@@ -452,17 +555,28 @@ class Colony:
             self.branchList[i].setRadius(np.sqrt(ratio * self.branchList[i].getParents()[0].getRadius()**2))
 
     def branchLength(self, branch):
-        # Walk from distal to proximal node
-        curNode = branch.getDistal()
-        length = 0
-        while not(curNode == branch.getProximal()):
-            length += np.linalg.norm(curNode.getLocation() - curNode.getParents()[0].getLocation())
-            curNode = curNode.getParents()[0]
-        return length
+        # If outlet branch:
+        if branch.getType() == "Outlet":
+            # Walk from proximal to distal node
+            curNode = branch.getProximal()
+            length = 0
+            while not(curNode == branch.getDistal()):
+                length += np.linalg.norm(curNode.getLocation() - curNode.getChildren()[0].getLocation())
+                curNode = curNode.getChildren()[0]
+            return length
+        # If inlet branch:
+        else:
+            # Walk from distal to proximal node
+            curNode = branch.getDistal()
+            length = 0
+            while not(curNode == branch.getProximal()):
+                length += np.linalg.norm(curNode.getLocation() - curNode.getParents()[0].getLocation())
+                curNode = curNode.getParents()[0]
+            return length
 
     def setResistance(self, mu):
-        # Convert mu from centipoise to dyn-s/cm^2
-        mu = mu * 0.01
+        # Convert mu from centipoise to dyn-s/mm^2
+        mu = mu * 0.0001
         for branch in self.branchList:
             L = self.branchLength(branch)
             R = (8 * mu * L) / (np.pi * branch.getRadius()**4)
@@ -518,3 +632,146 @@ class Colony:
     def setRSL(self, value):
         for sl in self.slList:
             sl.setResistance(value)
+
+    def queryQin(self, RSL, Pin, Pout):
+        self.setRSL(RSL)
+        start = time.time()
+        self.solveResistanceNetwork(Pin, Pout)
+        end = time.time()
+        for branch in self.branchList:
+            if branch.getType() == "Inlet" and branch.isRoot():
+                return branch.getFlowRate(), end - start
+
+    def fillStep(self, dt):
+        # Start with root branch
+        V = self.branchList[0].getFlowRate()*dt
+        self.branchList[0].addFluid(V)
+        # Now step through all the branches and move around the excess fluid
+        for branch in self.branchList:
+            # If the branch has excess fluid and isnt terminal, transfer to its children
+            if branch.getBuffer() > 0 and not branch.isTerminal():
+                Q = branch.getFlowRate()
+                # For each child give its corresponding amount of excess fluid based on proportion of total flow rate
+                if len(branch.getChildren()) > 1:
+                    for child in branch.getChildren():
+                        ratio = child.getFlowRate() / Q
+                        child.addFluid(branch.getBuffer() * ratio)
+                else:
+                    # For branches with only one child (SL branches and Outlet branches), just pass all fluid directly to child
+                    branch.getChildren()[0].addFluid(branch.getBuffer())
+                # Zero out the buffer from the parent branch
+                branch.setBuffer(0)
+            else:
+                # Otherwise can just zero the buffer on the terminal nodes
+                branch.setBuffer(0)
+
+    def getRNetworkDims(self):
+        nBranch = len(self.branchList)
+        nNode = 0
+        nSL = len(self.slList)
+        for node in self.nodeList:
+            if node.isSL():
+                nNode += 1
+            else:
+                if node.getType() == "Root":
+                    nNode += 1
+                elif node.getType() == "Terminal":
+                    nNode += 1
+                elif node.getType() == "Inlet" or node.getType() == "Outlet": # Furcation node
+                    nNode += 1
+
+        return nBranch, nNode, nSL
+
+    def getRadiiLims(self):
+        rmax = -np.inf
+        rmin = np.inf
+        for branch in self.branchList:
+            rad = branch.getRadius()
+            if rad > rmax:
+                rmax = rad
+            if rad < rmin:
+                rmin = rad
+        return rmin, rmax
+
+    def setReynoldsNumber(self, rho, mu):
+        # rho: g/mm^3
+        mu = mu / 100 #convert cP to g/(mm-s)
+        for branch in self.branchList:
+            Q = branch.getFlowRate() / 1000 # mL/s
+            Re = 2 * rho * Q / (mu * np.pi * branch.getRadius())
+            branch.setReynolds(Re)
+
+    def getReynoldsLims(self):
+        remax = -np.inf
+        remin = np.inf
+
+        for branch in self.branchList:
+            re = branch.getReynolds()
+            if re > remax:
+                remax = re
+            if re < remin:
+                remin = re
+        return remin, remax
+
+    def flowCheck(self):
+        # Get the direction of the inlet branch
+        for branch in self.branchList:
+            if branch.getType() == "Inlet" and branch.isRoot():
+                dir = branch.getFlowRate()
+        for branch in self.branchList:
+            if branch.getFlowRate() * dir < 0:
+                raise RuntimeError('Backflow: computed flows have inconsistent direction')
+
+    def setGeneration(self,omega,alpha):
+        # Call on trees before merge
+        # Walk through trees and assign generation numbers to branches according 
+        # to proximity to root and adherence to the following heuristics:
+
+        # Branch considered the same iff two conditions are met
+        # Radius condition -> r_new/r_old > ω
+        # Angle condition -> angle between parent & child branch > α
+
+        # Maintain a list counting the number of merged branches at each generation level
+        # This will be used to correct the n_branches when computing generational statistics
+        mergedCounter = list([0])
+        # Start with root branch
+        self.branchList[0].setGeneration(1)
+        for i in range(1, len(self.branchList)):
+            ratio = self.branchList[i].getRadius() / self.branchList[i].getParents()[0].getRadius()
+            angle = self.computeBranchAngle(self.branchList[i])
+            if ratio >= omega and angle >= alpha:
+                self.branchList[i].setGeneration(self.branchList[i].getParents()[0].getGeneration())
+                # Add to merged branch counter
+                mergedCounter[self.branchList[i].getParents()[0].getGeneration()-1] += 1
+            else:
+                gen = self.branchList[i].getParents()[0].getGeneration() + 1
+                self.branchList[i].setGeneration(gen)
+                if len(mergedCounter) < gen:
+                    mergedCounter.append(0)
+
+        return mergedCounter
+
+    def generationStatistics(self, omega, alpha):
+        mergedCounter = self.setGeneration(omega,alpha*np.pi/180)
+        nominalCounter = [0] * len(mergedCounter)
+        nominalLength = [0] * len(mergedCounter)
+        nominalRadius = [0] * len(mergedCounter)
+        for branch in self.branchList:
+            genIdx = branch.getGeneration() - 1
+            nominalCounter[genIdx] += 1
+            nominalLength[genIdx] += self.branchLength(branch)
+            nominalRadius[genIdx] += branch.getRadius()
+
+        genLength = np.array(nominalLength) / (np.array(nominalCounter) - np.array(mergedCounter))
+        genRadius = np.array(nominalRadius) / np.array(nominalCounter)
+
+        for i in range(len(mergedCounter)):
+            print("Gen #%d, Nominal = %d, Actual = %d, L = %.2f, R = %.2f" %(i+1, nominalCounter[i], nominalCounter[i]-mergedCounter[i] ,genLength[i], genRadius[i]))
+
+
+    def computeBranchAngle(self, branch):
+        # Compute angle between branch and parent branch, mod pi
+        v_branch = branch.getDistal().getLocation() - branch.getProximal().getLocation()
+        v_parent = branch.getParents()[0].getProximal().getLocation() - branch.getParents()[0].getDistal().getLocation()
+        return np.arccos(np.dot(v_branch, v_parent)/ (np.linalg.norm(v_branch) * np.linalg.norm(v_parent)))
+        

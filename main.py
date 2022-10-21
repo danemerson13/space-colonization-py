@@ -1,13 +1,23 @@
+from matplotlib.pyplot import plot
 import numpy as np
 import time
 
 import colony
 import kCluster
 import plotter
+import scipy
 
+# def main():
+# # # #     # n_clusters = list([5,10,15,20,30,40,50,60,70,80,90,100,120,140,160,180,200,250,300])
+# # # #     n_clusters = list([5,10,15,25,40,60,100,150,200,300])
+#     n_clusters = list([5,10,25,50,100,250])
+#     for n_clust in n_clusters:
+#         run(n_clust)
+
+# def run(n_clust):
 def main():
     # Geometry parameters
-    n_clust = 4
+    n_clust = 250
     initialRadius = 7.5 # mm?
 
     # Algorithm parameters
@@ -17,8 +27,10 @@ def main():
 
     # Blood parameters
     mu = 3.5 # centipoise
-    Pin = 10 # mmHg
+    rho = 1 # g/mL
+    Pin = 5.8 # mmHg
     Pout = 0 # mmHg
+    Qin = 767 # mL/min
 
     # Import the uniformly sampled point cloud on the liver volume
     # This will be used as the attractors and also to generate the point clouds
@@ -41,20 +53,18 @@ def main():
     col1 = colony.Colony(D,dk,di)
     col1.createTree(kmeans.cluster_centers_, pts, init1.nodeList, initialRadius, mu)
 
-    init2 = colony.Colony(D,dk,di)
-    init2.initTree(outlet_targets, pts, outlet)
-    col2 = colony.Colony(D,dk,di)
-    col2.createTree(kmeans.cluster_centers_, pts, init2.nodeList, initialRadius, mu)
+    # init2 = colony.Colony(D,dk,di)
+    # init2.initTree(outlet_targets, pts, outlet)
+    # col2 = colony.Colony(D,dk,di)
+    # col2.createTree(kmeans.cluster_centers_, pts, init2.nodeList, initialRadius, mu)
 
-    # Merge the two trees
-    col1.mergeTrees(col2)
+    # # Merge the two trees
+    # col1.mergeTrees(col2)
 
-    col1.solveResistanceNetwork(Pin, Pout)
+    # mergedCounter = col1.setGeneration(0.9, 120*np.pi/180)
+    col1.generationStatistics(0.7, 120)
+    plotter.plotGenerations(col1)
 
-    plotter.plotPressure(col1)
-    plotter.plotFlowRate(col1)
-
-    print("All Done")
-
+    
 if __name__ == "__main__":
     main()

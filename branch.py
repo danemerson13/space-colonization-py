@@ -26,8 +26,10 @@ class Branch:
         self.resistance = None
         self.flowrate = None
         self.volume = None
+        self.reynolds = None
         self.fluid = 0
         self.buffer = 0
+        self.generation = None
 
     def setProximal(self, prox):
         self.proximal = prox
@@ -111,6 +113,18 @@ class Branch:
 
     def getBuffer(self):
         return self.buffer
+
+    def setReynolds(self, Re):
+        self.reynolds = Re
+    
+    def getReynolds(self):
+        return self.reynolds
+
+    def setGeneration(self, gen):
+        self.generation = gen
+
+    def getGeneration(self):
+        return self.generation
 
 ##### UTILITY FUNCTIONS #####
 
