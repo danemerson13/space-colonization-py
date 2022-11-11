@@ -3,6 +3,7 @@ import numpy as np
 import plotter
 import imageio, os
 import time
+from matplotlib import pyplot as plt
 
 class Colony:
     def __init__(self, D, dk, di, ):
@@ -73,7 +74,7 @@ class Colony:
         for branch in outTree.branchList:
             self.branchList.append(branch)
 
-    def solveResistanceNetwork(self, Pin, Pout):
+    def solveResistanceNetwork(self, Pin, Pout, flag = False):
         # Convert Pressure from mmHg to dyn/mm^2
         Pin = Pin * 13.3322
 
@@ -178,6 +179,14 @@ class Colony:
         for node in VNodeList:
             node.setPressure(x[k])
             k += 1
+
+        # Print statistics about matrix if flag True
+        if flag:
+            print("2 Norm: ", np.linalg.norm(A, 2))
+            print("Frobenius Norm: ", np.linalg.norm(A, 'fro'))
+            print("Infinity Norm: ", np.linalg.norm(A, np.inf))
+            print("-Infinity Norm: ", np.linalg.norm(A, -np.inf))
+            print("Condition Number: ", np.linalg.cond(A))
 
     def solveRSL(self, Qactual, Pin, Pout, n_iter, tol, verbal, a = 0, b = 1e-4):
         # Solves for RSL value via bisection method with brackets a and b initialized such that f(a) * f(b) < 0, 
@@ -331,6 +340,26 @@ class Colony:
                 self.fillStep(dt)
                 time += dt
                 plotter.plotFilling(self, time)
+                image = imageio.imread('fill_%.2f.png' %time)
+                writer.append_data(image)
+                os.remove('fill_%.2f.png' %time)
+
+    def overfillNetwork(self, dt):
+        # Assign volumes and print total vessel volume
+        # (Volume assignment done within self.totalVolume() function)
+        print("Total Vessel Volume: ", self.totalVolume())
+        with imageio.get_writer('filling.gif', mode  = 'I') as writer:
+            # Begin iteration
+            time = 0
+            excess = 0.
+            plotter.plotFilling(self, time, excess)
+            image = imageio.imread('fill_%.2f.png' %time)
+            writer.append_data(image)
+            os.remove('fill_%.2f.png' %time)
+            while excess < 50000:
+                excess += self.fillStep(dt)
+                time += dt
+                plotter.plotFilling(self, time, excess)
                 image = imageio.imread('fill_%.2f.png' %time)
                 writer.append_data(image)
                 os.remove('fill_%.2f.png' %time)
@@ -657,6 +686,8 @@ class Colony:
         # Start with root branch
         V = self.branchList[0].getFlowRate()*dt
         self.branchList[0].addFluid(V)
+        # Track the excess fluid
+        excess = 0.
         # Now step through all the branches and move around the excess fluid
         for branch in self.branchList:
             # If the branch has excess fluid and isnt terminal, transfer to its children
@@ -674,7 +705,40 @@ class Colony:
                 branch.setBuffer(0)
             else:
                 # Otherwise can just zero the buffer on the terminal nodes
+                excess += branch.getBuffer()
                 branch.setBuffer(0)
+        # Now go through and make sure all buffers have been emptied
+        excess += self.emptyBuffers()
+        # Return the overflow/excess fluid
+        return excess
+
+    def checkBuffers(self):
+        vol = 0
+        for branch in self.branchList:
+            vol += branch.getBuffer()
+        return vol
+    
+    def emptyBuffers(self):
+        excess = 0.
+        while self.checkBuffers() > 0:
+            for branch in self.branchList:
+                if branch.getBuffer() > 0 and not branch.isTerminal():
+                    Q = branch.getFlowRate()
+                    # For each child give its corresponding amount of excess fluid based on proportion of total flow rate
+                    if len(branch.getChildren()) > 1:
+                        for child in branch.getChildren():
+                            ratio = child.getFlowRate() / Q
+                            child.addFluid(branch.getBuffer() * ratio)
+                    else:
+                        # For branches with only one child (SL branches and Outlet branches), just pass all fluid directly to child
+                        branch.getChildren()[0].addFluid(branch.getBuffer())
+                    # Zero out the buffer from the parent branch
+                    branch.setBuffer(0)
+                else:
+                    # Otherwise can just zero the buffer on the terminal nodes
+                    excess += branch.getBuffer()
+                    branch.setBuffer(0)
+        return excess
 
     def getRNetworkDims(self):
         nBranch = len(self.branchList)
@@ -779,10 +843,64 @@ class Colony:
         for i in range(len(mergedCounter)):
             print("Gen #%d, Nominal = %d, Actual = %d, L = %.2f, R = %.2f" %(i+1, nominalCounter[i], nominalCounter[i]-mergedCounter[i] ,genLength[i], genRadius[i]))
 
+    def generationBoxPlots(self, omega, alpha):
+        mergedCounter = self.setGeneration(omega,alpha*np.pi/180)
+        lengths = [[] for i in range(len(mergedCounter))]
+        radii = [[] for i in range(len(mergedCounter))]
+        for branch in self.branchList:
+            genIdx = branch.getGeneration() - 1
+            lengths[genIdx].append(self.branchLength(branch))
+            radii[genIdx].append(branch.getRadius())
+
+        plt.boxplot(lengths)
+        plt.xlabel("Generation")
+        plt.ylabel("Length")
+        plt.show()
+
+        plt.boxplot(radii)
+        plt.xlabel("Generation")
+        plt.ylabel("Radius")
+        plt.show()
 
     def computeBranchAngle(self, branch):
         # Compute angle between branch and parent branch, mod pi
         v_branch = branch.getDistal().getLocation() - branch.getProximal().getLocation()
         v_parent = branch.getParents()[0].getProximal().getLocation() - branch.getParents()[0].getDistal().getLocation()
         return np.arccos(np.dot(v_branch, v_parent)/ (np.linalg.norm(v_branch) * np.linalg.norm(v_parent)))
+
+    def branchAngleHist(self):
+        alpha = list()
+        for i in range(1, len(self.branchList)):
+            alpha.append(self.computeBranchAngle(self.branchList[i])*180/np.pi)
+        plt.hist(alpha,20)
+        plt.ylabel("Frequency")
+        plt.xlabel(r"$\alpha (deg)$")
+        plt.show()
+
+    def branchRadiusRatioHist(self):
+        omega = list()
+        for i in range(1, len(self.branchList)):
+            omega.append(self.branchList[i].getRadius() / self.branchList[i].getParents()[0].getRadius())
+        plt.hist(omega,20)
+        plt.ylabel("Frequency")
+        plt.xlabel(r"$\omega = \frac{r_{child}}{r_{parent}}$")
+        plt.show()
         
+    def branchAlphaOmegaHist(self):
+        alpha = list()
+        omega = list()
+        for i in range(1, len(self.branchList)):
+            alpha.append(self.computeBranchAngle(self.branchList[i])*180/np.pi)
+            omega.append(self.branchList[i].getRadius() / self.branchList[i].getParents()[0].getRadius())
+        h = plt.hist2d(np.array(alpha),np.array(omega),20)
+        plt.colorbar(h[3])
+        plt.xlabel(r"$\alpha (deg)$")
+        plt.ylabel(r"$\omega = \frac{r_{child}}{r_{parent}}$")
+        plt.show()
+
+    def setSLVolume(self, bloodVolume):
+        totalSLVolume = bloodVolume - self.totalVolume()
+        SLVolume = totalSLVolume / len(self.slList)
+        print(SLVolume)
+        for sl in self.slList:
+            sl.setVolume(SLVolume)

@@ -116,7 +116,7 @@ def plotReynolds(col):
     plt.savefig('reynolds.png')
     plt.show()
 
-def plotFilling(col,time):
+def plotFilling(col,time,excess):
     fig = plt.figure()
     ax = mplot3d.Axes3D(fig)
     liver, mesh = getLiverSTL()
@@ -166,6 +166,7 @@ def plotFilling(col,time):
     ax.set_title("T = %.2f" %time)
     ax.view_init(elev = -180., azim = -90.)
     ax.text(25,0,175,'Percent Full: %.0f' %(col.percentFull() * 100))
+    ax.text(25,0,150,"Excess Fluid: %.0f mL" %(excess / 1000))
     ax.set_axis_off()
     plt.savefig("fill_%.2f.png" %time, bbox_inches='tight')
     plt.close(fig)
@@ -198,7 +199,6 @@ def plotGenerations(col):
     ax.view_init(elev = -180., azim = -90.)
     ax.set_axis_off()
     plt.show()
-
 
 
 ##### HELPER FUNCTIONS #####
