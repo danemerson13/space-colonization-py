@@ -1,0 +1,9 @@
+# MacOS generated files
+.DS_Store
+
+# Python generated files
+__pycache__/
+
+# Scratch files
+scratch.ipynb
+scratch.py
