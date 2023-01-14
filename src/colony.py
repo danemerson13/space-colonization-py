@@ -1,6 +1,6 @@
-import attractor, node, branch, superlobule, segment
+from src import attractor, node, branch, superlobule, segment
 import numpy as np
-import plotter
+from util import plotter
 import imageio, os
 import time
 import pickle

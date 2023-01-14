@@ -4,6 +4,13 @@
 # Python generated files
 __pycache__/
 
+# VS Code generated files
+.vscode/
+
 # Scratch files
 scratch.ipynb
 scratch.py
+
+# Generated files, eresults, models, plots, gifs etc.
+filling.gif
+liver.obj
