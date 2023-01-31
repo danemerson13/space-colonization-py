@@ -11,6 +11,9 @@ __pycache__/
 scratch.ipynb
 scratch.py
 
-# Generated files, eresults, models, plots, gifs etc.
+# Outdated files
+colonyOLD.py
+
+# Generated files, results, models, plots, gifs etc.
 filling.gif
 liver.obj

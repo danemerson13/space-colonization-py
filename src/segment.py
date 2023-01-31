@@ -1,4 +1,5 @@
 import numpy as np
+import branch, superlobule
 
 class Segment:
     # Properties of a segment
@@ -6,17 +7,17 @@ class Segment:
     # distal: type = 3x1 np.array
     # parents: type = list(Segment)
     # children: type = list(Segment)
-    def __init__(self, prox, dist, branch):
+    # ancestor: type = either branch or superlobule class
+    def __init__(self, prox, dist, ancestor):
         self.proximal = prox
         self.distal = dist
         self.parents = list()
         self.children = list()
+        self.ancestor = ancestor
         self.root = False
 
-        self.branch = branch
         self.volume = None
         self.setVolume()
-
         self.concentration = 0
 
     def setProximal(self, prox):
@@ -50,13 +51,19 @@ class Segment:
         self.children.remove(child)
     
     def getRadius(self):
-        return self.branch.getRadius()
+        if self.ancestor == branch.Branch:
+            return self.ancestor.getRadius()
+        else:
+            return None
 
     def getFlowRate(self):
-        return self.branch.getFlowRate()
+        return self.ancestor.getFlowRate
 
     def setVolume(self):
-        self.volume =  np.pi * self.getRadius()**2 * np.linalg.norm(self.getProximal() - self.getDistal())
+        if self.ancestor == branch.Branch:
+            self.volume =  np.pi * self.getRadius()**2 * np.linalg.norm(self.getProximal() - self.getDistal())
+        else:
+            self.volume = self.ancestor.getVolume()
 
     def getVolume(self):
         return self.volume
