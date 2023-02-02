@@ -3,7 +3,7 @@ import time
 import os
 import sys
 
-from src import colony
+from . import colonyOLD
 from util import plotter, kCluster
 
 def createModel(pointPath, nSL):
@@ -41,15 +41,15 @@ def createModel(pointPath, nSL):
     kmeans = kCluster.myKMeans(pts, n_clust)
 
     # Initialize trees
-    init1 = colony.Colony(D,dk,di)
+    init1 = colonyOLD.Colony(D,dk,di)
     init1.initTree(inlet_targets, pts, inlet)
-    init2 = colony.Colony(D,dk,di)
+    init2 = colonyOLD.Colony(D,dk,di)
     init2.initTree(outlet_targets, pts, outlet)
 
     # Create full trees from initializations
-    col1 = colony.Colony(D,dk,di)
+    col1 = colonyOLD.Colony(D,dk,di)
     col1.createTree(kmeans.cluster_centers_, pts, init1.nodeList, initialRadius, mu)
-    col2 = colony.Colony(D,dk,di)
+    col2 = colonyOLD.Colony(D,dk,di)
     col2.createTree(kmeans.cluster_centers_, pts, init2.nodeList, initialRadius, mu)
 
     # Merge trees
