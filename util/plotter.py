@@ -16,6 +16,18 @@ def plotByBranch(col):
     o3d.visualization.draw_geometries(meshList)
     print("Done")
 
+def plotBySegment(col):
+    meshList = list()
+    for seg in col.segList:
+        if seg.isSL():
+            meshList.append(createSphere(seg.getProximal(), seg.getRadius(), color = np.array([1,0,1])))
+        elif seg.getAncestor().getType() == "Inlet":
+            meshList.append(createCylinder(seg.getProximal(),seg.getDistal(),seg.getRadius(), np.array([1,0,0])))
+        else: # seg.getAncestor().getType() == "Outlet"
+            meshList.append(createCylinder(seg.getProximal(),seg.getDistal(),seg.getRadius(), np.array([0,0,1])))
+    
+    o3d.visualization.draw_geometries(meshList)
+
 ##### Helper Functions #####
 
 def createConeAdv(baseCenter, topCenter, baseRadius, topRadius, baseAxis, topAxis, stackCount, sliceCount):
@@ -77,6 +89,17 @@ def createConeAdv(baseCenter, topCenter, baseRadius, topRadius, baseAxis, topAxi
     mesh.compute_vertex_normals()
 
     return mesh
+
+def createSphere(loc, radius, color):
+    # Make template sphere
+    sph = o3d.geometry.TriangleMesh.create_sphere(radius)
+    # Translarte to correct position
+    sph = copy.deepcopy(sph).translate(loc)
+    # Make it look nice
+    sph.paint_uniform_color(color)
+    sph.compute_triangle_normals()
+    sph.compute_vertex_normals()
+    return sph
 
 def createCylinder(a, b, radius, color):
     # Make template cylinder aligned with z-axis

@@ -348,7 +348,44 @@ class Colony:
 
     def fillTree(self, dt):
         # TODO Note do so with segment methodology
-        pass
+        time = 0.
+        totalConc = self.getTotalConcentration()
+        # Save the time and conc
+        self.tList.append(time)
+        self.concentrationList.append(totalConc)
+        # Run until totalConc is within some eps of 100% 
+        # Filling becomes progressively slow as we approach 100% hence the tolerance
+        while totalConc < 1-1e-3:
+            # print("Concentration: ", totalConc)
+            # Add fluid with concentration 1 to root segment
+            rootSeg = self.findRootSegment()
+            rootSeg.updateConcentration(Cin = 1, Vin = rootSeg.getFlowRate() * dt)
+            # Build updated segment list
+            newSegList = list()
+            newSegList.append(rootSeg)
+            for seg in self.segList:
+                # Now update concentrations in all segments of the i+1 segList except for the root segment (since we already updated it)
+                if seg != rootSeg:
+                    newSegList.append(seg)
+                    if len(seg.getParents()) > 1:
+                        # If there are multiple parents weight their contribution to Cin by their proportional flow rates
+                        Cin = 0.
+                        flowRate = 0.
+                        for parent in seg.getParents():
+                            Cin += parent.getConcentration() * parent.getFlowRate()
+                            flowRate += parent.getFlowRate()
+                        Cin = Cin / flowRate
+                    else: # Otherwise just pass all fluid to children
+                        Cin = seg.getParents()[0].getConcentration()
+                        flowRate = seg.getParents()[0].getFlowRate()
+                    newSegList[-1].updateConcentration(Cin = Cin, Vin = flowRate * dt)
+            # Once complete, replace the old segList with the new segList
+            self.segList = newSegList
+            time += dt
+            totalConc = self.getTotalConcentration()
+            # Save the time and conc
+            self.tList.append(time)
+            self.concentrationList.append(totalConc)
 
     def saveModel(self):
         # TODO decide what info is relevant to save now
@@ -589,7 +626,6 @@ class Colony:
                 return bran
 
     def findCorrespondingBranch(self, parentBranch):
-        # TODO formerly findChildBranchCrossTree
         # Find the branch in branchList where the distal node of the parent 
         # branch matches the proximal node of the child branch from another tree
         dist = self.findNodeByLoc(parentBranch.getDistal().getLocation())
@@ -681,7 +717,12 @@ class Colony:
 # Filling Specific
 
     def createSegments(self, lmax):
-        # Function to discretize the branches of the tree into segments
+        # Function to discretize the branches and SLs of the tree into segments
+        # First do SLs since they are the simplest case
+        for sl in self.slList:
+            self.segList.append(segment.Segment(prox = sl.getLocation(), dist = sl.getLocation, ancestor = sl))
+            # Mark the segment as SL
+            self.segList[-1].setSL()
         # Branches are divided into a variable number of segments, of length no longer than lmax
         rootflag = False
         for branch in self.branchList:
@@ -706,13 +747,33 @@ class Colony:
         # Function to connect segments sequentially
         # TODO need to connect SL segments to SL then the downstream segment
         # TODO would be a good point to check if radii match at SL interface
+
+        # First find the SL segments and pair them with their up and downstream branch segments
         for segment1 in self.segList:
-            for segment2 in self.segList:
-                if segment1 != segment2:
-                    # Find segments sharing dist and proximal nodes
-                    if np.linalg.norm(segment1.getDistal() - segment2.getProximal()) < 1e-6:
-                        segment1.setChild(segment2)
-                        segment2.setParent(segment1)
+            # Check segment belongs to SL
+            if segment1.getType() == superlobule.SuperLobule:
+                # Check segment belongs to branch
+                for segment2 in self.segList:
+                    if segment2.getType() == branch.Branch:
+                        if np.linalg.norm(segment1.getProximal() - segment2.getDistal()) < 1e-6:
+                            # This case is an inlet segment leading into the SL segment
+                            segment1.setParent(segment2)
+                            segment2.setChild(segment1)
+                        elif np.linalg.norm(segment1.getProximal() - segment2.getProximal()) < 1e-6:
+                            # This case is the SL segment leading to an outlet segment
+                            segment1.setChild(segment2)
+                            segment2.setParent(segment1)
+        # Now go through the branch segments and pair them up
+        for segment1 in self.segList:
+            if not(segment1.isSL()):
+                for segment2 in self.segList:
+                    if not(segment2.isSL()):
+                        # Check we arent comparing the same segemnt, and that both segments arent SL adjacent (share a SL connection)
+                        if segment1 != segment2 and (not(segment1.isSLAdjacent()) or not(segment2.isSLAdjacent())):
+                            # Find segments sharing dist and proximal nodes
+                            if np.linalg.norm(segment1.getDistal() - segment2.getProximal()) < 1e-6:
+                                segment1.setChild(segment2)
+                                segment2.setParent(segment1)
 
     def getBranchNodes(self, branch):
         # Returns the nodes that comprise a branch as a list
@@ -773,6 +834,5 @@ class Colony:
         # the remaining volume between all SLs and assigns it as such
         totalSLVolume = bloodVolume - self.totalVesselVolume()
         SLVolume = totalSLVolume / len(self.slList)
-        print(SLVolume)
         for sl in self.slList:
             sl.setVolume(SLVolume)

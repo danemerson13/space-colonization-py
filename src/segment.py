@@ -8,6 +8,8 @@ class Segment:
     # parents: type = list(Segment)
     # children: type = list(Segment)
     # ancestor: type = either branch or superlobule class
+    # root: type = bool 
+    # SL: type = bool
     def __init__(self, prox, dist, ancestor):
         self.proximal = prox
         self.distal = dist
@@ -15,6 +17,7 @@ class Segment:
         self.children = list()
         self.ancestor = ancestor
         self.root = False
+        self.SL = False
 
         self.volume = None
         self.setVolume()
@@ -49,15 +52,18 @@ class Segment:
 
     def removeChild(self, child):
         self.children.remove(child)
+
+    def getAncestor(self):
+        return self.ancestor
     
     def getRadius(self):
         if self.ancestor == branch.Branch:
             return self.ancestor.getRadius()
-        else:
-            return None
+        else: # sl ancestor, compute rad from eq of sphere volume
+            return np.power((3/4*self.getVolume()/np.pi),1/3)
 
     def getFlowRate(self):
-        return self.ancestor.getFlowRate
+        return self.ancestor.getFlowRate()
 
     def setVolume(self):
         if self.ancestor == branch.Branch:
@@ -83,3 +89,27 @@ class Segment:
 
     def isRoot(self):
         return self.root
+
+    def setSL(self):
+        self.SL = True
+
+    def isSL(self):
+        return self.SL
+
+    def getType(self):
+        return type(self.ancestor)
+
+    def isSLAdjacent(self):
+        # Return True if the segment lies adjacent to an SL or is an SL
+        # If it does we dont want to connect it to the other segment 
+        # that shares a prox/dist node, only want to connect it to the SL
+        if self.isSL():
+            return True
+        for child in self.children:
+            if child.isSL():
+                return True
+        for parent in self.parents:
+            if parent.isSL():
+                return True
+        # Otherwise
+        return False

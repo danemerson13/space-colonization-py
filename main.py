@@ -2,6 +2,7 @@ import numpy as np
 import time
 import os
 import sys
+import pickle
 
 from src import colony
 from util import plotter, kCluster
@@ -58,32 +59,62 @@ def createModel(pointPath, nSL):
     # Solve
     col1.solveRSL(Qin, Pin, Pout, n_iter=1000, tol=1e-6, verbosity=0, a=0, b=1e-4)
 
+    col1.setSLVolume(375000) # Setting SL volume with bloodVol = 375 mL
+
     return col1
 
 def auto():
-    nSL = [1000,2000,5000,10000]
+    nSL = [5,10,25,50,100,250]
     sys.setrecursionlimit(10**6)
     for n in nSL:
-        for i in range(10):
-            start = time.time()
-            path = "Point Clouds/liverSample" + str(i) + ".npy"
-            col = createModel(path, nSL = n)
-            dir = 'Saved Models' + '/' + 'n' + str(n) + '_' + str(i)
-            try:
-                os.mkdir(dir)
-            except OSError as error:
-                pass
-            col.saveModel(dir)
-            end = time.time()
-            print("SL = %d, Point Cloud #%d took %.2f secs" %(n, i, end-start))
+        start = time.time()
+        path = "data/Point Clouds/10k Clouds/liverSample" + str(0) + ".npy"
+        col = createModel(path, nSL = n)
+        col.createSegments(lmax = 100)
+        col.connectSegments()
+        col.fillTree(0.5)
+        # Save the conc and times
+        tconc = dict(zip(col.tList, col.concentrationList))
+        filename = "tconc" + str(n) +".pkl"
+        file = open(filename, 'wb')
+        pickle.dump(tconc, file)
+        end = time.time()
+        print("nSL = " + str(n) + ", took " + str(end-start) + " seconds.")
+
+    # for n in nSL:
+    #     for i in range(10):
+    #         start = time.time()
+    #         path = "Point Clouds/liverSample" + str(i) + ".npy"
+    #         col = createModel(path, nSL = n)
+    #         dir = 'Saved Models' + '/' + 'n' + str(n) + '_' + str(i)
+    #         try:
+    #             os.mkdir(dir)
+    #         except OSError as error:
+    #             pass
+    #         col.saveModel(dir)
+    #         end = time.time()
+    #         print("SL = %d, Point Cloud #%d took %.2f secs" %(n, i, end-start))
 
 def main():
+    # auto()
     sys.setrecursionlimit(10**6)
     path = "data/Point Clouds/10k Clouds/liverSample" + str(0) + ".npy"
+    start = time.time()
     col = createModel(path, nSL = 50)
-    plotter.plotByBranch(col)
-    # plotter.plotSegments(col)
-    print('Hold On')
+    end = time.time()
+    print("Time to create model: ", end - start)
+    # plotter.plotByBranch(col)
+    start = time.time()
+    col.createSegments(100)
+    col.connectSegments()
+    end = time.time()
+    print("Time to segment: ", end - start)
+    start = time.time()
+    # col.fillTree(0.5)
+    plotter.plotBySegment(col)
+    end = time.time()
+    print("Time to fill: ", end - start)
+    print("All Done!")
     # col.saveModel(os.getcwd())
 
 if __name__ == "__main__":
