@@ -1,5 +1,5 @@
 import numpy as np
-import branch, superlobule
+from src import branch, superlobule
 
 class Segment:
     # Properties of a segment

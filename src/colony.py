@@ -64,9 +64,9 @@ class Colony:
         self.setRadii(Rinitial)
         self.setResistance(mu)
 
-    def mergeTrees(self, secondTree):
+    def mergeTrees(self, outTree):
         # Merges two trees to complete a connected vasculature
-        # Syntax is that self tree would be the inlet, secondTree would be the outlet as it is reversed
+        # Syntax is that self tree would be the inlet tree, outTree would be the outlet tree as it is the one reversed
         # ----
         # First reverse the outlet tree
         outTree = outTree.reverseTree()
@@ -275,7 +275,7 @@ class Colony:
         # With improvements from https://doi.org/10.1016/j.jvlc.2015.10.016
         # And further additions made for the purpose of liver vasculature modeling.
         prevNodeCount = len(self.nodeList)
-        while self.numTargets() > 0:
+        while self.getNumTargets() > 0:
             # First find the node closest to each attractor
             # Note: this is returned as a list with pointers to the closest nodes, 
             # with None returned where there are no nodes within di
@@ -296,7 +296,7 @@ class Colony:
                     # What is the distance < D that we need to step to exactly reach the target
                     D_exact = self.checkTargetDistance(activeAttractors[0], growthNode)
                     # Add a *terminal* node in this direction at distance D_exact
-                    self.addSLNode(dir, D_exact, growthNode)
+                    self.addSLNode(growthNode, dir, D_exact)
                     # Flag this target attractor as killed
                     self.attractorList[activeAttractors[0]].setKill()
                 # The below else statement handles the more common case where we are stepping from a node to multiple attractors
@@ -304,7 +304,7 @@ class Colony:
                     # Compute direction to step in
                     dir = self.attractorNormal(activeAttractors, growthNode)
                     # Add node in this direction at distance D
-                    self.addNode(dir, growthNode, activeAttractors)
+                    self.addNode(growthNode, dir, activeAttractors)
             # Once all of the nodes have been added, we will kill any attractors within dk of
             # existing nodes. Note: we cannot kill target attractors, unless they have been reached
             self.killAttractors()
@@ -347,10 +347,11 @@ class Colony:
         return new
 
     def fillTree(self, dt):
-        # Note do so with segment methodology
+        # TODO Note do so with segment methodology
         pass
 
     def saveModel(self):
+        # TODO decide what info is relevant to save now
         pass
 
 ##### HELPER FUNCTIONS #####
@@ -502,6 +503,29 @@ class Colony:
 
 # Space Colonization Post-Processing
 
+    def findNodeByLoc(self, loc):
+        # Given a location find the node which corresponds within eps
+        eps = 1e-6
+        for node in self.nodeList:
+            if np.linalg.norm(node.getLocation() - loc) < eps:
+                return node
+
+    def findBranchByLoc(self, prox, dist):
+        # Given a prox and dist node, finds the branch which corresponds within eps
+        eps = 1e-6
+        proxLoc = prox.getLocation()
+        distLoc = dist.getLocation()
+        for branch in self.branchList:
+            if np.linalg.norm(branch.getProximal().getLocation() - proxLoc) < eps and np.linalg.norm(branch.getDistal().getLocation() - distLoc) < eps:
+                return branch
+
+    def findSLByLoc(self, loc):
+        # Given a location find the SL which corresponds within eps
+        eps = 1e-6
+        for sl in self.slList:
+            if np.linalg.norm(sl.getLocation() - loc) < eps:
+                return sl
+
     def trimNodes(self):
         # Function to prune all nodes that are not involved in reaching a terminal (SL) node
         # Traverses the tree from SL nodes back to the root and adds all nodes that were passed
@@ -573,7 +597,7 @@ class Colony:
             if bran.getProximal() == dist:
                 return bran
 
-    def countTerminals(self):
+    def countTerminals(self, branch):
         # Function to count the number of terminals below a given branch
         # This function is used to determine the ratio of terminals when assigning radii
         count = 0
@@ -618,7 +642,7 @@ class Colony:
                 curNode = curNode.getParents()[0]
             return length
 
-    def setResistance(self):
+    def setResistance(self, mu):
         # Function to assign resistance to branches based on Hagen-Poiseuille: R = 8*mu*L/(pi*rad^4)
         # Convert mu from centipoise to dyn-s/mm^2
         mu = mu * 0.0001
