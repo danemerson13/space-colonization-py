@@ -22,6 +22,10 @@ class Colony:
         self.tList = list()
         self.concentrationList = list()
 
+        self.tSpaceCol = None
+        self.tMatrixSolve = None
+        self.tRSLSolve = None
+
 ##### HIGH LEVEL FUNCTIONS #####
 
     def initTree(self, targets, attractors, root):
@@ -41,7 +45,7 @@ class Colony:
         self.trimNodes()
 
     def createTree(self, targets, attractors, initNodeList, Rinitial, mu):
-        # Create the full tree from iniatilized tree
+        # Creates the full tree from iniatilized tree
         # -----
         # Add the attractors and target attractors
         self.addAttractors(targets, attractors)
@@ -54,7 +58,11 @@ class Colony:
                 self.nodeList[-1].setSL(False)
 
         # Run SC Algorithm
+        start = time.time()
         self.runSpaceColonization()
+        end = time.time()
+        # Store time to run space colinization in 
+        self.tSpaceCol = end - start
 
         # Trim nodes and create branches
         self.trimNodes()
@@ -255,6 +263,9 @@ class Colony:
         end = time.time()
         elapsed = end - start
         avg_mat_solve = np.mean(t_list)
+        # Add the RSL Bisection solve time and avg matrix solve to class variables
+        self.tMatrixSolve = avg_mat_solve
+        self.tRSLSolve = elapsed
 
         if iter >= n_iter:
             print("DID NOT CONVERGE - Method terminated after %d iterations with RSL = %.2f and a tolerance of %.2E" %(iter, c, np.abs(Qactual - Qc)/Qactual))
@@ -347,7 +358,7 @@ class Colony:
         return new
 
     def fillTree(self, dt):
-        # TODO Note do so with segment methodology
+        # Function to iteratively fill the segments of a give tree
         time = 0.
         totalConc = self.getTotalConcentration()
         # Save the time and conc
@@ -355,6 +366,8 @@ class Colony:
         self.concentrationList.append(totalConc)
         # Run until totalConc is within some eps of 100% 
         # Filling becomes progressively slow as we approach 100% hence the tolerance
+        # In paper we will use the notion of settling or rise time from first order systems (~98%),
+        # but for the sake of robustness I will fill further so I dont need to rerun simulations
         while totalConc < 1-1e-3:
             # print("Concentration: ", totalConc)
             # Add fluid with concentration 1 to root segment
@@ -387,9 +400,11 @@ class Colony:
             self.tList.append(time)
             self.concentrationList.append(totalConc)
 
-    def saveModel(self):
-        # TODO decide what info is relevant to save now
-        pass
+    def saveModel(self, path):
+        # Save the completed Colony object to a pickle file in the specified path
+        with open(os.getcwd() + '/' + path + '/model.pkl', 'wb') as activeFile:
+            pickle.dump(self, activeFile)
+
 
 ##### HELPER FUNCTIONS #####
 
@@ -745,7 +760,6 @@ class Colony:
 
     def connectSegments(self):
         # Function to connect segments sequentially
-        # TODO need to connect SL segments to SL then the downstream segment
         # TODO would be a good point to check if radii match at SL interface
 
         # First find the SL segments and pair them with their up and downstream branch segments
@@ -768,7 +782,7 @@ class Colony:
             if not(segment1.isSL()):
                 for segment2 in self.segList:
                     if not(segment2.isSL()):
-                        # Check we arent comparing the same segemnt, and that both segments arent SL adjacent (share a SL connection)
+                        # Check we arent comparing the same segment, and that both segments arent SL adjacent (share a SL connection)
                         if segment1 != segment2 and (not(segment1.isSLAdjacent()) or not(segment2.isSLAdjacent())):
                             # Find segments sharing dist and proximal nodes
                             if np.linalg.norm(segment1.getDistal() - segment2.getProximal()) < 1e-6:
@@ -836,3 +850,14 @@ class Colony:
         SLVolume = totalSLVolume / len(self.slList)
         for sl in self.slList:
             sl.setVolume(SLVolume)
+
+# Return Functions
+
+    def getSpaceColTime(self):
+        return self.tSpaceCol
+
+    def getRSLSolveTime(self):
+        return self.tRSLSolve
+
+    def getMatrixSolveTime(self):
+        return self.tMatrixSolve

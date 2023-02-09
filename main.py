@@ -64,36 +64,31 @@ def createModel(pointPath, nSL):
     return col1
 
 def auto():
-    nSL = [5,10,25,50,100,250]
-    sys.setrecursionlimit(10**6)
+    nSL = [5,10,25,50,100,250,500,1000,2000]
+    sys.setrecursionlimit(10**9)
     for n in nSL:
-        start = time.time()
-        path = "data/Point Clouds/10k Clouds/liverSample" + str(0) + ".npy"
-        col = createModel(path, nSL = n)
-        col.createSegments(lmax = 100)
-        col.connectSegments()
-        col.fillTree(0.5)
-        # Save the conc and times
-        tconc = dict(zip(col.tList, col.concentrationList))
-        filename = "tconc" + str(n) +".pkl"
-        file = open(filename, 'wb')
-        pickle.dump(tconc, file)
-        end = time.time()
-        print("nSL = " + str(n) + ", took " + str(end-start) + " seconds.")
-
-    # for n in nSL:
-    #     for i in range(10):
-    #         start = time.time()
-    #         path = "Point Clouds/liverSample" + str(i) + ".npy"
-    #         col = createModel(path, nSL = n)
-    #         dir = 'Saved Models' + '/' + 'n' + str(n) + '_' + str(i)
-    #         try:
-    #             os.mkdir(dir)
-    #         except OSError as error:
-    #             pass
-    #         col.saveModel(dir)
-    #         end = time.time()
-    #         print("SL = %d, Point Cloud #%d took %.2f secs" %(n, i, end-start))
+        # Check that directory exists, if not make it
+        if not os.path.exists(os.getcwd() + '/results/' + str(n) + 'SL'):
+            os.mkdir(os.getcwd() + '/results/' + str(n) + 'SL')
+        for i in range(10):
+            # Use richer point cloud for models with more SLs
+            if n <= 100:
+                path = 'data/Point Clouds/10k Clouds/liverSample' + str(i) + '.npy'
+            else:
+                path = 'data/Point Clouds/100k Clouds/liverSample' + str(i) + '.npy'
+            # Create the model, simulate filling, save
+            start = time.time()
+            col = createModel(path, nSL = n)
+            col.createSegments(lmax = 0.5)
+            col.fillTree(dt = 0.5)
+            # Save the tree
+            folder = os.getcwd() + '/results/' + str(n) + 'SL' + '/sample' + str(i)
+            # Check that directory exists, if not make it
+            if not os.path.exists(folder):
+                os.mkdir(folder)
+            col.saveModel(path = folder)
+            end = time.time()
+            print("%dSL%d took %.2f secs" %(n, i, end-start))
 
 def main():
     # auto()
