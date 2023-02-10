@@ -402,7 +402,7 @@ class Colony:
 
     def saveModel(self, path):
         # Save the completed Colony object to a pickle file in the specified path
-        with open(os.getcwd() + '/' + path + '/model.pkl', 'wb') as activeFile:
+        with open(path + '/model.pkl', 'wb') as activeFile:
             pickle.dump(self, activeFile)
 
 
@@ -735,7 +735,7 @@ class Colony:
         # Function to discretize the branches and SLs of the tree into segments
         # First do SLs since they are the simplest case
         for sl in self.slList:
-            self.segList.append(segment.Segment(prox = sl.getLocation(), dist = sl.getLocation, ancestor = sl))
+            self.segList.append(segment.Segment(prox = sl.getLocation(), dist = sl.getLocation(), ancestor = sl))
             # Mark the segment as SL
             self.segList[-1].setSL()
         # Branches are divided into a variable number of segments, of length no longer than lmax

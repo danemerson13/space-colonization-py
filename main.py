@@ -80,6 +80,7 @@ def auto():
             start = time.time()
             col = createModel(path, nSL = n)
             col.createSegments(lmax = 0.5)
+            col.connectSegments()
             col.fillTree(dt = 0.5)
             # Save the tree
             folder = os.getcwd() + '/results/' + str(n) + 'SL' + '/sample' + str(i)
@@ -92,6 +93,7 @@ def auto():
 
 def main():
     auto()
+    
     # sys.setrecursionlimit(10**6)
     # path = "data/Point Clouds/10k Clouds/liverSample" + str(0) + ".npy"
     # start = time.time()
