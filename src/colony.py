@@ -401,6 +401,9 @@ class Colony:
             self.concentrationList.append(totalConc)
 
     def saveModel(self, path):
+        # For the large SL models, the segList takes up too much memory when saving with pickle
+        # Clear the segList before saving
+        self.segList = list()
         # Save the completed Colony object to a pickle file in the specified path
         with open(path + '/model.pkl', 'wb') as activeFile:
             pickle.dump(self, activeFile)

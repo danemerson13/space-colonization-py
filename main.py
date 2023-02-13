@@ -64,13 +64,14 @@ def createModel(pointPath, nSL):
     return col1
 
 def auto():
-    nSL = [5,10,25,50,100,250,500,1000,2000]
+    nSL = [500,1000,2000]
     sys.setrecursionlimit(10**9)
     for n in nSL:
         # Check that directory exists, if not make it
         if not os.path.exists(os.getcwd() + '/results/' + str(n) + 'SL'):
             os.mkdir(os.getcwd() + '/results/' + str(n) + 'SL')
         for i in range(10):
+            print("%dSL%d" %(n, i))
             # Use richer point cloud for models with more SLs
             if n <= 100:
                 path = 'data/Point Clouds/10k Clouds/liverSample' + str(i) + '.npy'
@@ -79,17 +80,27 @@ def auto():
             # Create the model, simulate filling, save
             start = time.time()
             col = createModel(path, nSL = n)
+            end = time.time()
+            print("Model created in ", end - start, " seconds.")
+            start = time.time()
             col.createSegments(lmax = 0.5)
             col.connectSegments()
+            end = time.time()
+            print("Segments created in ", end - start, " seconds.")
+            start = time.time()
             col.fillTree(dt = 0.5)
+            end = time.time()
+            print("Tree filled in ", end - start, " seconds.")
             # Save the tree
+            start = time.time()
             folder = os.getcwd() + '/results/' + str(n) + 'SL' + '/sample' + str(i)
             # Check that directory exists, if not make it
             if not os.path.exists(folder):
                 os.mkdir(folder)
             col.saveModel(path = folder)
             end = time.time()
-            print("%dSL%d took %.2f secs" %(n, i, end-start))
+            end = time.time()
+            print("Segments created in ", end - start, " seconds.")
 
 def main():
     auto()
