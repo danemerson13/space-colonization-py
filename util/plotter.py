@@ -28,6 +28,9 @@ def plotBySegment(col):
     
     o3d.visualization.draw_geometries(meshList)
 
+def plot2DSegment(col):
+    pass
+
 ##### Helper Functions #####
 
 def createConeAdv(baseCenter, topCenter, baseRadius, topRadius, baseAxis, topAxis, stackCount, sliceCount):

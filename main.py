@@ -5,7 +5,8 @@ import sys
 import pickle
 
 from src import colony
-from util import plotter, kCluster
+from util import plotter
+from util.KMeans import kCluster
 
 def createModel(pointPath, nSL):
     # Geometry Parameters
@@ -64,7 +65,7 @@ def createModel(pointPath, nSL):
     return col1
 
 def auto():
-    nSL = [500,1000,2000]
+    nSL = [5,10,25,50,100,250,500,1000,2000]
     sys.setrecursionlimit(10**9)
     for n in nSL:
         # Check that directory exists, if not make it
@@ -82,15 +83,16 @@ def auto():
             col = createModel(path, nSL = n)
             end = time.time()
             print("Model created in ", end - start, " seconds.")
-            start = time.time()
-            col.createSegments(lmax = 0.5)
-            col.connectSegments()
-            end = time.time()
-            print("Segments created in ", end - start, " seconds.")
-            start = time.time()
-            col.fillTree(dt = 0.5)
-            end = time.time()
-            print("Tree filled in ", end - start, " seconds.")
+            ### Blocking off the filling/segmentation for now until segment/fill time incosistency is resolved
+            # start = time.time()
+            # col.createSegments(lmax = 0.5)
+            # col.connectSegments()
+            # end = time.time()
+            # print("Segments created in ", end - start, " seconds.")
+            # start = time.time()
+            # col.fillTree(dt = 0.5)
+            # end = time.time()
+            # print("Tree filled in ", end - start, " seconds.")
             # Save the tree
             start = time.time()
             folder = os.getcwd() + '/results/' + str(n) + 'SL' + '/sample' + str(i)
@@ -102,27 +104,45 @@ def auto():
             print("Model saved in ", end - start, " seconds.")
 
 def main():
-    auto()
-    
-    # sys.setrecursionlimit(10**6)
-    # path = "data/Point Clouds/10k Clouds/liverSample" + str(0) + ".npy"
-    # start = time.time()
-    # col = createModel(path, nSL = 50)
-    # end = time.time()
-    # print("Time to create model: ", end - start)
-    # # plotter.plotByBranch(col)
-    # start = time.time()
-    # col.createSegments(100)
-    # col.connectSegments()
-    # end = time.time()
-    # print("Time to segment: ", end - start)
-    # start = time.time()
-    # # col.fillTree(0.5)
-    # plotter.plotBySegment(col)
-    # end = time.time()
-    # print("Time to fill: ", end - start)
-    # print("All Done!")
-    # # col.saveModel(os.getcwd())
+    i = 2
+    n = 25
+
+    # Check that directory exists, if not make it
+    if not os.path.exists(os.getcwd() + '/trial/' + str(n) + 'SL'):
+        os.mkdir(os.getcwd() + '/trial/' + str(n) + 'SL')
+
+    sys.setrecursionlimit(10**9)
+
+    print("%dSL%d" %(n, i))
+    # Use richer point cloud for models with more SLs
+    if n <= 100:
+        path = 'data/Point Clouds/10k Clouds/liverSample' + str(i) + '.npy'
+    else:
+        path = 'data/Point Clouds/100k Clouds/liverSample' + str(i) + '.npy'
+    # Create the model, segment, simulate filling, save model
+    start = time.time()
+    col = createModel(path, nSL = n)
+    end = time.time()
+    print("Model created in ", end - start, " seconds.")
+    start = time.time()
+    col.createSegments(lmax = 1000)
+    col.connectSegments()
+    end = time.time()
+    print("Segments created in ", end - start, " seconds.")
+    start = time.time()
+    col.fillTree(dt = 0.5)
+    end = time.time()
+    print("Tree filled in ", end - start, " seconds.")
+    # Save the tree
+    start = time.time()
+    folder = os.getcwd() + '/trial/' + str(n) + 'SL' + '/sample' + str(i)
+    # Check that directory exists, if not make it
+    if not os.path.exists(folder):
+        os.mkdir(folder)
+    col.saveModel(path = folder)
+    end = time.time()
+    print("Model saved in ", end - start, " seconds.")
 
 if __name__ == "__main__":
-    main()
+    # main()
+    auto()
