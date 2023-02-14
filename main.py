@@ -99,8 +99,7 @@ def auto():
                 os.mkdir(folder)
             col.saveModel(path = folder)
             end = time.time()
-            end = time.time()
-            print("Segments created in ", end - start, " seconds.")
+            print("Model saved in ", end - start, " seconds.")
 
 def main():
     auto()
