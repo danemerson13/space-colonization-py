@@ -260,6 +260,27 @@ class Colony:
             # Update counter
             iter += 1
 
+        # Iterate with regula falsi
+        # t_list = list()
+        # c = ((Qa-Qactual)*b - (Qb-Qactual)*a)/(Qa - Qb)
+        # Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
+        # iter = 0
+        # while np.abs((Qactual - Qc)/Qactual) > tol and iter < n_iter:
+        #     if verbosity >= 3:
+        #         print("Iter: %d, RSL = %.2f, Tolerance: %.2E" %(iter, c, np.abs(Qactual - Qc)/Qactual))
+        #     # Regula Falsi Method logic
+        #     if (Qa - Qactual) * (Qc - Qactual) < 0:
+        #         b = c
+        #         Qb = Qc
+        #     else:
+        #         a = c
+        #         Qa = Qc
+        #     # Update c
+        #     c = ((Qa-Qactual)*b - (Qb-Qactual)*a)/(Qa - Qb)
+        #     Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
+        #     # Update counter
+        #     iter += 1
+
         end = time.time()
         elapsed = end - start
         avg_mat_solve = np.mean(t_list)
@@ -864,3 +885,9 @@ class Colony:
 
     def getMatrixSolveTime(self):
         return self.tMatrixSolve
+    
+    def getRNetworkDims(self):
+        nBranch = len(self.branchList)
+        nNode = len(self.nodeList)
+        nSL = len(self.slList)
+        return nBranch, nNode, nSL

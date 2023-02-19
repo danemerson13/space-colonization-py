@@ -58,7 +58,7 @@ def createModel(pointPath, nSL):
     col1.mergeTrees(col2)
 
     # Solve
-    col1.solveRSL(Qin, Pin, Pout, n_iter=1000, tol=1e-6, verbosity=0, a=0, b=1e-4)
+    col1.solveRSL(Qin, Pin, Pout, n_iter=1000, tol=1e-6, verbosity=3, a=0, b=1e-4)
 
     col1.setSLVolume(375000) # Setting SL volume with bloodVol = 375 mL
 
@@ -104,12 +104,12 @@ def auto():
             print("Model saved in ", end - start, " seconds.")
 
 def main():
-    i = 2
-    n = 25
+    i = 0
+    n = 5
 
     # Check that directory exists, if not make it
-    if not os.path.exists(os.getcwd() + '/trial/' + str(n) + 'SL'):
-        os.mkdir(os.getcwd() + '/trial/' + str(n) + 'SL')
+    # if not os.path.exists(os.getcwd() + '/trial/' + str(n) + 'SL'):
+    #     os.mkdir(os.getcwd() + '/trial/' + str(n) + 'SL')
 
     sys.setrecursionlimit(10**9)
 
@@ -124,25 +124,25 @@ def main():
     col = createModel(path, nSL = n)
     end = time.time()
     print("Model created in ", end - start, " seconds.")
-    start = time.time()
-    col.createSegments(lmax = 1000)
-    col.connectSegments()
-    end = time.time()
-    print("Segments created in ", end - start, " seconds.")
-    start = time.time()
-    col.fillTree(dt = 0.5)
-    end = time.time()
-    print("Tree filled in ", end - start, " seconds.")
-    # Save the tree
-    start = time.time()
-    folder = os.getcwd() + '/trial/' + str(n) + 'SL' + '/sample' + str(i)
-    # Check that directory exists, if not make it
-    if not os.path.exists(folder):
-        os.mkdir(folder)
-    col.saveModel(path = folder)
-    end = time.time()
-    print("Model saved in ", end - start, " seconds.")
+    # start = time.time()
+    # col.createSegments(lmax = 1000)
+    # col.connectSegments()
+    # end = time.time()
+    # print("Segments created in ", end - start, " seconds.")
+    # start = time.time()
+    # col.fillTree(dt = 0.5)
+    # end = time.time()
+    # print("Tree filled in ", end - start, " seconds.")
+    # # Save the tree
+    # start = time.time()
+    # folder = os.getcwd() + '/trial/' + str(n) + 'SL' + '/sample' + str(i)
+    # # Check that directory exists, if not make it
+    # if not os.path.exists(folder):
+    #     os.mkdir(folder)
+    # col.saveModel(path = folder)
+    # end = time.time()
+    # print("Model saved in ", end - start, " seconds.")
 
 if __name__ == "__main__":
-    # main()
-    auto()
+    main()
+    # auto()
