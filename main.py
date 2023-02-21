@@ -124,24 +124,19 @@ def main():
     col = createModel(path, nSL = n)
     end = time.time()
     print("Model created in ", end - start, " seconds.")
-    # start = time.time()
-    # col.createSegments(lmax = 1000)
-    # col.connectSegments()
-    # end = time.time()
-    # print("Segments created in ", end - start, " seconds.")
-    # start = time.time()
-    # col.fillTree(dt = 0.5)
-    # end = time.time()
-    # print("Tree filled in ", end - start, " seconds.")
-    # # Save the tree
-    # start = time.time()
-    # folder = os.getcwd() + '/trial/' + str(n) + 'SL' + '/sample' + str(i)
-    # # Check that directory exists, if not make it
-    # if not os.path.exists(folder):
-    #     os.mkdir(folder)
-    # col.saveModel(path = folder)
-    # end = time.time()
-    # print("Model saved in ", end - start, " seconds.")
+    start = time.time()
+    col.fillTree(dt = 0.5)
+    end = time.time()
+    print("Filling algorithm took ", end- start, "seconds.")
+    # Save the tree
+    start = time.time()
+    folder = os.getcwd() + '/trial/' + str(n) + 'SL' + '/sample' + str(i)
+    # Check that directory exists, if not make it
+    if not os.path.exists(folder):
+        os.mkdir(folder)
+    col.saveModel(path = folder)
+    end = time.time()
+    print("Model saved in ", end - start, " seconds.")
 
 if __name__ == "__main__":
     main()

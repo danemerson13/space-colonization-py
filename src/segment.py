@@ -19,6 +19,8 @@ class Segment:
         self.root = False
         self.SL = False
 
+        self.length = None
+        self.setLength()
         self.volume = None
         self.setVolume()
         self.concentration = 0
@@ -56,6 +58,14 @@ class Segment:
     def getAncestor(self):
         return self.ancestor
     
+    def setLength(self):
+        if self.ancestor == branch.Branch:
+            self.length = self.ancestor.getLength()
+        # SL segments have no notion of length
+
+    def getLength(self):
+        return self.length
+    
     def getRadius(self):
         if self.ancestor == branch.Branch:
             return self.ancestor.getRadius()
@@ -67,22 +77,12 @@ class Segment:
 
     def setVolume(self):
         if self.ancestor == branch.Branch:
-            self.volume =  np.pi * self.getRadius()**2 * np.linalg.norm(self.getProximal() - self.getDistal())
+            self.volume =  np.pi * self.getRadius()**2 * self.getLength()
         else:
             self.volume = self.ancestor.getVolume()
 
     def getVolume(self):
         return self.volume
-
-    def getConcentration(self):
-        return self.concentration
-
-    def updateConcentration(self, Cin, Vin):
-        Vol = self.getVolume()
-        if Vin < Vol:
-            self.concentration = (Cin * Vin + (Vol - Vin) * self.getConcentration())/Vol
-        else:
-            self.concentration = Cin
 
     def setRoot(self):
         self.root = True

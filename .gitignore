@@ -13,6 +13,7 @@ scratch.py
 
 # Outdated files
 colonyOLD.py
+segmentOLD.py
 
 # Generated files, results, models, plots, gifs etc.
 filling.gif

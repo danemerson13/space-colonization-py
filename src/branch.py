@@ -22,14 +22,13 @@ class Branch:
 
         self.setType()
 
+        self.length = None
         self.radius = None
         self.resistance = None
         self.flowrate = None
         self.volume = None
-        self.reynolds = None
-        self.fluid = 0
-        self.buffer = 0
-        self.generation = None
+        self.concentration = 0
+        self.updateFlag = None
 
     def setProximal(self, prox):
         self.proximal = prox
@@ -74,6 +73,12 @@ class Branch:
     def getType(self):
         return self.type
 
+    def setLength(self, L):
+        self.length = L
+
+    def getLength(self):
+        return self.length
+
     def setRadius(self, rad):
         self.radius = rad
     
@@ -97,37 +102,23 @@ class Branch:
 
     def getVolume(self):
         return self.volume
-
-    def addFluid(self, V):
-        if self.fluid + V > self.getVolume():
-            self.addBuffer(self.fluid + V - self.getVolume())
-            self.fluid = self.volume
-        else:
-            self.fluid += V
-
-    def getFluid(self):
-        return self.fluid
-
-    def addBuffer(self, V):
-        self.buffer += V
-
-    def setBuffer(self, V):
-        self.buffer = V
-
-    def getBuffer(self):
-        return self.buffer
-
-    def setReynolds(self, Re):
-        self.reynolds = Re
     
-    def getReynolds(self):
-        return self.reynolds
+    def getConcentration(self):
+        return self.concentration
 
-    def setGeneration(self, gen):
-        self.generation = gen
+    def updateConcentration(self, Cin, Vin):
+        Vol = self.getVolume()
+        if Vin < Vol:
+            self.concentration = (Cin * Vin + (Vol - Vin) * self.getConcentration())/Vol
+        else:
+            self.concentration = Cin
+        self.setUpdateFlag(True)
 
-    def getGeneration(self):
-        return self.generation
+    def setUpdateFlag(self, val):
+        self.updateFlag = val
+
+    def isUpdated(self):
+        return self.updateFlag
 
 ##### UTILITY FUNCTIONS #####
 

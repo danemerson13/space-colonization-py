@@ -17,7 +17,7 @@ class Colony:
         self.nodeList = list()
         self.slList = list()
         self.branchList = list()
-        self.segList = list()
+        self.fillList = list()
 
         self.tList = list()
         self.concentrationList = list()
@@ -68,7 +68,8 @@ class Colony:
         self.trimNodes()
         self.createBranches()
 
-        # Assign radii and resistances
+        # Assign length, radii and resistances
+        self.setLength()
         self.setRadii(Rinitial)
         self.setResistance(mu)
 
@@ -84,14 +85,16 @@ class Colony:
             if branch.isTerminal():
                 prox = branch.getDistal()
                 dist = outTree.findNodeByLoc(branch.getDistal().getLocation())
-                self.slList.append(superlobule.SuperLobule(branch.getDistal().getLocation(), prox, dist))
                 # Pair the nodes from the inlet and outlet trees together
                 prox.setChild(dist)
                 dist.setParent(prox)
-                # Pair the branches from the inlet and outlet trees together
+                # Find the corresponding branch on the outTree
                 distBranch = outTree.findCorrespondingBranch(branch)
-                branch.setChild(distBranch)
-                distBranch.setParent(branch)
+                # Join adjacent inlet outlet tree branches at their super lobule
+                self.slList.append(superlobule.SuperLobule(branch.getDistal().getLocation(), prox, dist, parent = branch, child = distBranch))
+                # Add the SL to the up and downstream branches child/parent lists respectively
+                branch.setChild(self.slList[-1])
+                distBranch.setParent(self.slList[-1])
 
         # Add the nodes and branches from the outlet tree
         for node in outTree.nodeList:
@@ -164,12 +167,14 @@ class Colony:
                 if branch.getType() == "Inlet":
                     A[j, self.branchList.index(branch)] = 1
                     # Find the matching SL
-                    sl = self.findSLByLoc(branch.getDistal().getLocation())
+                    sl = branch.getChildren()[0]
+                    # sl = self.findSLByLoc(branch.getDistal().getLocation())
                     A[j, nBranch + self.slList.index(sl)] = -1
                 else: # branch.getType() == "Outlet"
                     A[j, self.branchList.index(branch)] = -1
                     # Find the matching SL
-                    sl = self.findSLByLoc(branch.getProximal().getLocation())
+                    sl = branch.getParents()[0]
+                    # sl = self.findSLByLoc(branch.getProximal().getLocation())
                     A[j, nBranch + self.slList.index(sl)] = 1
                 j += 1
             else: # branch not SL
@@ -357,7 +362,8 @@ class Colony:
         for oldBranch in self.branchList:
             # Make sure to assign the (reversed) prox/dist nodes from the new tree
             new.branchList.append(branch.Branch(new.findNodeByLoc(oldBranch.getDistal().getLocation()), new.findNodeByLoc(oldBranch.getProximal().getLocation())))
-            # Carry over the branch radius, and resistance
+            # Carry over the branch length, radius, and resistance
+            new.branchList[-1].setLength(oldBranch.getLength())
             new.branchList[-1].setRadius(oldBranch.getRadius())
             new.branchList[-1].setResistance(oldBranch.getResistance())
         # Add parent child relationships for the new nodes
@@ -379,45 +385,64 @@ class Colony:
         return new
 
     def fillTree(self, dt):
-        # Function to iteratively fill the segments of a give tree
+        # Create the first fillList
+        self.fillList += self.branchList + self.slList
+        # Initialize time and total concentration
         time = 0.
         totalConc = self.getTotalConcentration()
-        # Save the time and conc
+        # Save the time and concentration
         self.tList.append(time)
         self.concentrationList.append(totalConc)
-        # Run until totalConc is within some eps of 100% 
+        # Run until totalConc is within some epsilon of 100%
         # Filling becomes progressively slow as we approach 100% hence the tolerance
         # In paper we will use the notion of settling or rise time from first order systems (~98%),
         # but for the sake of robustness I will fill further so I dont need to rerun simulations
-        while totalConc < 1-1e-3:
-            # print("Concentration: ", totalConc)
-            # Add fluid with concentration 1 to root segment
-            rootSeg = self.findRootSegment()
-            rootSeg.updateConcentration(Cin = 1, Vin = rootSeg.getFlowRate() * dt)
-            # Build updated segment list
-            newSegList = list()
-            newSegList.append(rootSeg)
-            for seg in self.segList:
-                # Now update concentrations in all segments of the i+1 segList except for the root segment (since we already updated it)
-                if seg != rootSeg:
-                    newSegList.append(seg)
-                    if len(seg.getParents()) > 1:
-                        # If there are multiple parents weight their contribution to Cin by their proportional flow rates
-                        Cin = 0.
-                        flowRate = 0.
-                        for parent in seg.getParents():
-                            Cin += parent.getConcentration() * parent.getFlowRate()
-                            flowRate += parent.getFlowRate()
-                        Cin = Cin / flowRate
-                    else: # Otherwise just pass all fluid to children
-                        Cin = seg.getParents()[0].getConcentration()
-                        flowRate = seg.getParents()[0].getFlowRate()
-                    newSegList[-1].updateConcentration(Cin = Cin, Vin = flowRate * dt)
-            # Once complete, replace the old segList with the new segList
-            self.segList = newSegList
+        eps = 1-1e-3
+        iter = 0
+        while totalConc < eps:
+            print("Iter %d,  Concentration: %.4f" %(iter, totalConc))
+            root = self.findRoot()
+            root.updateConcentration(Cin = 1, Vin = root.getFlowRate() * dt)
+            # Build new fillList
+            newFillList = list()
+            newFillList.append(root)
+            # Need to iterate through fillList until all are updated
+            loop = 0
+            while self.getNumUpdated() < len(self.fillList):
+                for obj in self.fillList:
+                    # Check if the object has yet be updated
+                    if not(obj.isUpdated()):
+                        # If we need to update the object, check that its parent(s) have all been updated as well
+                        parentUpdate = True
+                        for parent in obj.getParents():
+                            if not parent.isUpdated():
+                                parentUpdate = False
+                        if parentUpdate == True:
+                            # Now we can go ahead with updating the concentration
+                            if len(obj.getParents()) > 1:
+                                # If there are multiple parents weight their contribution to Cin by their proportional flow rates
+                                Cin = 0.
+                                flowRate = 0.
+                                for parent in obj.getParents():
+                                    Cin += parent.getConcentration() * parent.getFlowRate()
+                                    flowRate += parent.getFlowRate()
+                                Cin = Cin / flowRate
+                            else: # Otherwise just pass all fluid to children
+                                Cin = obj.getParents()[0].getConcentration()
+                                flowRate = obj.getParents()[0].getFlowRate()
+                            obj.updateConcentration(Cin = Cin, Vin = flowRate * dt)
+                            newFillList.append(obj)
+                    loop += 1
+            print("Took %d fill list loops" %loop)
+            # Once all of the branches and SLs have been updated, we can move to the next iteration
+            # Update the time, total concentration, and swap the newFillList over to self.fillList
             time += dt
+            iter += 1
             totalConc = self.getTotalConcentration()
-            # Save the time and conc
+            self.fillList = newFillList
+            # On the new fillList, flip all of the update switches back to False
+            self.resetUpdateFlag()
+            # Save the time and totalConc
             self.tList.append(time)
             self.concentrationList.append(totalConc)
 
@@ -697,6 +722,11 @@ class Colony:
             ratio = self.countTerminals(self.branchList[i])/self.countTerminals(self.branchList[i].getParents()[0])
             self.branchList[i].setRadius(np.sqrt(ratio * self.branchList[i].getParents()[0].getRadius()**2))
 
+    def setLength(self):
+        # Assigns length to all branches in model
+        for branch in self.branchList:
+            branch.setLength(self.branchLength(branch))
+
     def branchLength(self, branch):
         # If outlet branch:
         if branch.getType() == "Outlet":
@@ -722,8 +752,7 @@ class Colony:
         # Convert mu from centipoise to dyn-s/mm^2
         mu = mu * 0.0001
         for branch in self.branchList:
-            L = self.branchLength(branch)
-            R = (8 * mu * L) / (np.pi * branch.getRadius()**4)
+            R = (8 * mu * branch.getLength()) / (np.pi * branch.getRadius()**4)
             branch.setResistance(R)
 
     def setRSL(self, RSL):
@@ -755,108 +784,28 @@ class Colony:
 
 # Filling Specific
 
-    def createSegments(self, lmax):
-        # Function to discretize the branches and SLs of the tree into segments
-        # First do SLs since they are the simplest case
-        for sl in self.slList:
-            self.segList.append(segment.Segment(prox = sl.getLocation(), dist = sl.getLocation(), ancestor = sl))
-            # Mark the segment as SL
-            self.segList[-1].setSL()
-        # Branches are divided into a variable number of segments, of length no longer than lmax
-        rootflag = False
-        for branch in self.branchList:
-            nodes = self.getBranchNodes(branch)
-            for i in range(len(nodes)-1):
-                length = np.linalg.norm(nodes[i].getLocation() - nodes[i+1].getLocation())
-                # Compute the number of segments for the following nodes
-                segNum = np.ceil(length/lmax)
-                prox = nodes[i].getLocation()
-                dir = (nodes[i+1].getLocation() - nodes[i].getLocation())/np.linalg.norm(nodes[i+1].getLocation() - nodes[i].getLocation())
-                step = dir * length/segNum
-                for _ in range(int(segNum)):
-                    dist = prox + step
-                    self.segList.append(segment.Segment(prox, dist, branch))
-                    # Check to see if we marked the root segment yet
-                    if rootflag == False and branch.isRoot():
-                        self.segList[-1].setRoot()
-                        rootflag = True
-                    prox = dist
-
-    def connectSegments(self):
-        # Function to connect segments sequentially
-        # TODO would be a good point to check if radii match at SL interface
-
-        # First find the SL segments and pair them with their up and downstream branch segments
-        for segment1 in self.segList:
-            # Check segment belongs to SL
-            if segment1.getType() == superlobule.SuperLobule:
-                # Check segment belongs to branch
-                for segment2 in self.segList:
-                    if segment2.getType() == branch.Branch:
-                        if np.linalg.norm(segment1.getProximal() - segment2.getDistal()) < 1e-6:
-                            # This case is an inlet segment leading into the SL segment
-                            segment1.setParent(segment2)
-                            segment2.setChild(segment1)
-                        elif np.linalg.norm(segment1.getProximal() - segment2.getProximal()) < 1e-6:
-                            # This case is the SL segment leading to an outlet segment
-                            segment1.setChild(segment2)
-                            segment2.setParent(segment1)
-        # Now go through the branch segments and pair them up
-        for segment1 in self.segList:
-            if not(segment1.isSL()):
-                for segment2 in self.segList:
-                    if not(segment2.isSL()):
-                        # Check we arent comparing the same segment, and that both segments arent SL adjacent (share a SL connection)
-                        if segment1 != segment2 and (not(segment1.isSLAdjacent()) or not(segment2.isSLAdjacent())):
-                            # Find segments sharing dist and proximal nodes
-                            if np.linalg.norm(segment1.getDistal() - segment2.getProximal()) < 1e-6:
-                                segment1.setChild(segment2)
-                                segment2.setParent(segment1)
-
-    def getBranchNodes(self, branch):
-        # Returns the nodes that comprise a branch as a list
-        nodes = list()
-        if branch.getType() == "Inlet":
-            # If inlet tree go dist -> prox
-            prox = branch.getProximal()
-            nodeA = branch.getDistal()
-            while nodeA != prox:
-                nodes.append(nodeA)
-                nodeA = nodeA.getParents()[0]
-            nodes.append(nodeA)
-            # Reverse this list so nodes are returned from inlet -> outlet (proximal -> distal)
-            nodes.reverse()
-        else:
-            # If outlet tree go prox -> dist
-            dist = branch.getDistal()
-            nodeA = branch.getProximal()
-            while nodeA != dist:
-                nodes.append(nodeA)
-                nodeA = nodeA.getChildren()[0]
-            nodes.append(nodeA)
-        return nodes
-
     def getTotalConcentration(self):
         # Function to to compute total concentration of 
         vol = 0.
         conc = 0.
-        for seg in self.segList:
-            vol += seg.getVolume()
-            conc += seg.getVolume() * seg.getConcentration()
+        for obj in self.fillList:
+            vol += obj.getVolume()
+            conc += obj.getVolume() * obj.getConcentration()
         return conc/vol
 
-    def findRootSegment(self):
-        # Locates the root segment in segList
-        for seg in self.segList:
-            if seg.isRoot():
-                return seg
+    def findRoot(self):
+        # Locates the root branch in fillList
+        for obj in self.fillList:
+            # First check we have a branch and not a SL
+            if isinstance(obj, branch.Branch):
+                # Then check if it is a root branch belonging to the inlet tree
+                if obj.getType() == "Inlet" and obj.isRoot():
+                    return obj
 
     def setBranchVolume(self):
         # Assigns a volume to each branch based on its length and radius
         for branch in self.branchList:
-            rad = branch.getRadius()
-            length = self.branchLength(branch)
-            branch.setVolume(np.pi * rad**2 * length)
+            branch.setVolume(np.pi * branch.getRadius()**2 * branch.getLength())
 
     def totalVesselVolume(self):
         # Computes the total vessel volume in the model
@@ -874,6 +823,17 @@ class Colony:
         SLVolume = totalSLVolume / len(self.slList)
         for sl in self.slList:
             sl.setVolume(SLVolume)
+
+    def getNumUpdated(self):
+        ct = 0
+        for obj in self.fillList:
+            if obj.isUpdated():
+                ct += 1
+        return ct
+    
+    def resetUpdateFlag(self):
+        for obj in self.fillList:
+            obj.setUpdateFlag(False)
 
 # Return Functions
 
