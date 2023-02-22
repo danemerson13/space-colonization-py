@@ -398,16 +398,16 @@ class Colony:
         # In paper we will use the notion of settling or rise time from first order systems (~98%),
         # but for the sake of robustness I will fill further so I dont need to rerun simulations
         eps = 1-1e-3
-        iter = 0
+        # iter = 0
         while totalConc < eps:
-            print("Iter %d,  Concentration: %.4f" %(iter, totalConc))
+            # print("Iter %d,  Concentration: %.4f" %(iter, totalConc))
             root = self.findRoot()
             root.updateConcentration(Cin = 1, Vin = root.getFlowRate() * dt)
             # Build new fillList
             newFillList = list()
             newFillList.append(root)
             # Need to iterate through fillList until all are updated
-            loop = 0
+            # loop = 0
             while self.getNumUpdated() < len(self.fillList):
                 for obj in self.fillList:
                     # Check if the object has yet be updated
@@ -432,12 +432,12 @@ class Colony:
                                 flowRate = obj.getParents()[0].getFlowRate()
                             obj.updateConcentration(Cin = Cin, Vin = flowRate * dt)
                             newFillList.append(obj)
-                    loop += 1
-            print("Took %d fill list loops" %loop)
+                    # loop += 1
+            # print("Took %d fill list loops" %loop)
             # Once all of the branches and SLs have been updated, we can move to the next iteration
             # Update the time, total concentration, and swap the newFillList over to self.fillList
             time += dt
-            iter += 1
+            # iter += 1
             totalConc = self.getTotalConcentration()
             self.fillList = newFillList
             # On the new fillList, flip all of the update switches back to False
@@ -447,9 +447,9 @@ class Colony:
             self.concentrationList.append(totalConc)
 
     def saveModel(self, path):
-        # For the large SL models, the segList takes up too much memory when saving with pickle
-        # Clear the segList before saving
-        # self.segList = list()
+        # For the large SL models, the fillList takes up unnecessary when saving with pickle
+        # Clear the fillList before saving
+        self.fillList = list()
         # Save the completed Colony object to a pickle file in the specified path
         with open(path + '/model.pkl', 'wb') as activeFile:
             pickle.dump(self, activeFile)

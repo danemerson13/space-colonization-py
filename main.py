@@ -58,7 +58,7 @@ def createModel(pointPath, nSL):
     col1.mergeTrees(col2)
 
     # Solve
-    col1.solveRSL(Qin, Pin, Pout, n_iter=1000, tol=1e-6, verbosity=3, a=0, b=1e-4)
+    col1.solveRSL(Qin, Pin, Pout, n_iter=1000, tol=1e-6, verbosity=0, a=0, b=1e-4)
 
     col1.setSLVolume(375000) # Setting SL volume with bloodVol = 375 mL
 
@@ -83,17 +83,10 @@ def auto():
             col = createModel(path, nSL = n)
             end = time.time()
             print("Model created in ", end - start, " seconds.")
-            ### Blocking off the filling/segmentation for now until segment/fill time incosistency is resolved
-            # start = time.time()
-            # col.createSegments(lmax = 0.5)
-            # col.connectSegments()
-            # end = time.time()
-            # print("Segments created in ", end - start, " seconds.")
-            # start = time.time()
-            # col.fillTree(dt = 0.5)
-            # end = time.time()
-            # print("Tree filled in ", end - start, " seconds.")
-            # Save the tree
+            start = time.time()
+            col.fillTree(dt = 0.2)
+            end = time.time()
+            print("Tree filled in ", end - start, " seconds.")
             start = time.time()
             folder = os.getcwd() + '/results/' + str(n) + 'SL' + '/sample' + str(i)
             # Check that directory exists, if not make it
@@ -104,8 +97,8 @@ def auto():
             print("Model saved in ", end - start, " seconds.")
 
 def main():
-    i = 0
-    n = 5
+    i = 4   
+    n = 25
 
     # Check that directory exists, if not make it
     # if not os.path.exists(os.getcwd() + '/trial/' + str(n) + 'SL'):
@@ -125,12 +118,12 @@ def main():
     end = time.time()
     print("Model created in ", end - start, " seconds.")
     start = time.time()
-    col.fillTree(dt = 0.5)
+    col.fillTree(dt = 0.1)
     end = time.time()
     print("Filling algorithm took ", end- start, "seconds.")
     # Save the tree
     start = time.time()
-    folder = os.getcwd() + '/trial/' + str(n) + 'SL' + '/sample' + str(i)
+    folder = os.getcwd() + '/misc/trial/' + str(n) + 'SL' + '/sample' + str(i)
     # Check that directory exists, if not make it
     if not os.path.exists(folder):
         os.mkdir(folder)
@@ -139,5 +132,5 @@ def main():
     print("Model saved in ", end - start, " seconds.")
 
 if __name__ == "__main__":
-    main()
-    # auto()
+    # main()
+    auto()
