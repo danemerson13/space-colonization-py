@@ -5,34 +5,44 @@ import matplotlib
 import matplotlib.pyplot as plt
 from stl import mesh as np_mesh
 from mpl_toolkits import mplot3d
+import sys
+sys.path.append('../../Space Colonization/')
+from src import superlobule, branch
+import os
 
-def plotByBranch(col):
-    meshList = list()
-    for branch in col.branchList:
-        coords = getBranchCoords(branch)
-        for j in range(len(coords) - 1):
-            if branch.getType() == "Inlet":
-                meshList.append(createCylinder(coords[j],coords[j+1],branch.getRadius(), np.array([1,0,0])))
-            if branch.getType() == "Outlet":
-                meshList.append(createCylinder(coords[j],coords[j+1],branch.getRadius(), np.array([0,0,1])))
+def plotConcentration(col, time = None, path = None):
+    # Create the figure
+    fig = plt.figure()
+    ax = mplot3d.Axes3D(fig)
+    liver, mesh = getLiverSTL()
+    ax.add_collection3d(liver)
 
-    print("Hold")
-    o3d.visualization.draw_geometries(meshList)
-    print("Done")
+    for obj in col.fillList:
+        # Interpolate color
+        conc = obj.getConcentration()
+        color = conc*np.array([1,0,0]) + (1-conc)*np.array([0,0,1])
+        if isinstance(obj, branch.Branch):
+            coords = getBranchCoords(obj)
+            rad = obj.getRadius()
+            color = conc*np.array([1,0,0]) + (1-conc)*np.array([0,0,1])
+            for j in range(len(coords) - 1):
+                ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', lw = rad, color = color)
+        else: # isinstance(obj, superlobule.SuperLobule)
+            loc = obj.getLocation()
+            ax.plot3D(loc[0],loc[1],loc[2],'o', ms = 10, color = color)
 
-def plotBySegment(col):
-    meshList = list()
-    for seg in col.segList:
-        if seg.isSL():
-            meshList.append(createSphere(seg.getProximal(), seg.getRadius(), color = np.array([1,0,1])))
-        elif seg.getAncestor().getType() == "Inlet":
-            meshList.append(createCylinder(seg.getProximal(),seg.getDistal(),seg.getRadius(), np.array([1,0,0])))
-        else: # seg.getAncestor().getType() == "Outlet"
-            meshList.append(createCylinder(seg.getProximal(),seg.getDistal(),seg.getRadius(), np.array([0,0,1])))
-    
-    o3d.visualization.draw_geometries(meshList)
+    bound_mesh(ax, mesh)
+    ax.view_init(elev = -180., azim = -90.)
+    ax.text(25,0,150,'Concentration: %.3f' %(conc))
+    ax.text(25,0,175,"Time: %.2f s" %(time))
+    ax.set_axis_off()
+    if path:
+        plt.savefig(path, bbox_inches = 'tight', dpi = 200)
+        plt.close()
+    else:
+        plt.show()
 
-def plotFlowRate(col):
+def plotFlowRate(col, path = None):
     # Create color mapping, max note to convert flowRate from mm^3/s to mmHg/min by multiplying by 3/50
     fmin, fmax = getFlowRateLims(col)
     cmap = matplotlib.cm.viridis
@@ -56,8 +66,23 @@ def plotFlowRate(col):
     ax.view_init(elev = -180., azim = -90.)
     ax.set_axis_off()
     fig.colorbar(mymap,  label = 'Flow Rate (mL/min)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
-    plt.savefig('flowrate.png', dpi = 500)
-    plt.show()
+    if path:
+        plt.savefig(path, dpi = 200)
+        plt.close()
+    else:
+        plt.show()
+
+def plotBranch3D(col):
+    meshList = list()
+    for branch in col.branchList:
+        coords = getBranchCoords(branch)
+        for j in range(len(coords) - 1):
+            if branch.getType() == "Inlet":
+                meshList.append(createCylinder(coords[j],coords[j+1],branch.getRadius(), np.array([1,0,0])))
+            if branch.getType() == "Outlet":
+                meshList.append(createCylinder(coords[j],coords[j+1],branch.getRadius(), np.array([0,0,1])))
+
+    o3d.visualization.draw_geometries(meshList)
 
 ##### Helper Functions #####
 
@@ -177,7 +202,7 @@ def getBranchCoords(branch):
 
 def getLiverSTL():
     # Load the STL files and add the vectors to the plot
-    mesh = np_mesh.Mesh.from_file('data/Models/liver159.stl')
+    mesh = np_mesh.Mesh.from_file(os.getcwd() + '/data/Models/liver159.stl')
     liver = mplot3d.art3d.Poly3DCollection(mesh.vectors)
     liver.set_alpha(0.05)
     liver.set_facecolor([0.5, 0.5, 0.5, 0.20])
