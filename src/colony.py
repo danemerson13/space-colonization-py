@@ -384,7 +384,43 @@ class Colony:
         # Return the reversed tree
         return new
 
-    def fillTree(self, dt):
+    def fillStep(self, dt):
+        # Start by filling the root segment
+        root = self.findRoot()
+        root.updateConcentration(Cin = 1, Vin = root.getFlowRate() * dt)
+        # Build new fillList
+        newFillList = list()
+        newFillList.append(root)
+        # Need to iterate through fillList until all are updated
+        # loop = 0
+        while self.getNumUpdated() < len(self.fillList):
+            for obj in self.fillList:
+                # Check if the object has yet be updated
+                if not(obj.isUpdated()):
+                    # If we need to update the object, check that its parent(s) have all been updated as well
+                    parentUpdate = True
+                    for parent in obj.getParents():
+                        if not parent.isUpdated():
+                            parentUpdate = False
+                    if parentUpdate == True:
+                        # Now we can go ahead with updating the concentration
+                        if len(obj.getParents()) > 1:
+                            # If there are multiple parents weight their contribution to Cin by their proportional flow rates
+                            Cin = 0.
+                            flowRate = 0.
+                            for parent in obj.getParents():
+                                Cin += parent.getConcentration() * parent.getFlowRate()
+                                flowRate += parent.getFlowRate()
+                            Cin = Cin / flowRate
+                        else: # Otherwise just pass all fluid to children
+                            Cin = obj.getParents()[0].getConcentration()
+                            flowRate = obj.getParents()[0].getFlowRate()
+                        obj.updateConcentration(Cin = Cin, Vin = flowRate * dt)
+                        newFillList.append(obj)
+        # Update the fillList to our newly ordered fillList (this is only really important after the first iteration)
+        self.fillList = newFillList
+
+    def fillTree(self, dt, gif = False):
         # Create the first fillList
         self.fillList += self.branchList + self.slList
         # Initialize time and total concentration
@@ -398,53 +434,31 @@ class Colony:
         # In paper we will use the notion of settling or rise time from first order systems (~98%),
         # but for the sake of robustness I will fill further so I dont need to rerun simulations
         eps = 1-1e-3
-        # iter = 0
-        while totalConc < eps:
-            # print("Iter %d,  Concentration: %.4f" %(iter, totalConc))
-            root = self.findRoot()
-            root.updateConcentration(Cin = 1, Vin = root.getFlowRate() * dt)
-            # Build new fillList
-            newFillList = list()
-            newFillList.append(root)
-            # Need to iterate through fillList until all are updated
-            # loop = 0
-            while self.getNumUpdated() < len(self.fillList):
-                for obj in self.fillList:
-                    # Check if the object has yet be updated
-                    if not(obj.isUpdated()):
-                        # If we need to update the object, check that its parent(s) have all been updated as well
-                        parentUpdate = True
-                        for parent in obj.getParents():
-                            if not parent.isUpdated():
-                                parentUpdate = False
-                        if parentUpdate == True:
-                            # Now we can go ahead with updating the concentration
-                            if len(obj.getParents()) > 1:
-                                # If there are multiple parents weight their contribution to Cin by their proportional flow rates
-                                Cin = 0.
-                                flowRate = 0.
-                                for parent in obj.getParents():
-                                    Cin += parent.getConcentration() * parent.getFlowRate()
-                                    flowRate += parent.getFlowRate()
-                                Cin = Cin / flowRate
-                            else: # Otherwise just pass all fluid to children
-                                Cin = obj.getParents()[0].getConcentration()
-                                flowRate = obj.getParents()[0].getFlowRate()
-                            obj.updateConcentration(Cin = Cin, Vin = flowRate * dt)
-                            newFillList.append(obj)
-                    # loop += 1
-            # print("Took %d fill list loops" %loop)
-            # Once all of the branches and SLs have been updated, we can move to the next iteration
-            # Update the time, total concentration, and swap the newFillList over to self.fillList
-            time += dt
-            # iter += 1
-            totalConc = self.getTotalConcentration()
-            self.fillList = newFillList
-            # On the new fillList, flip all of the update switches back to False
-            self.resetUpdateFlag()
-            # Save the time and totalConc
-            self.tList.append(time)
-            self.concentrationList.append(totalConc)
+
+        # Create the gif folder if it doesnt exist
+        if gif:
+            path = os.getcwd() + '/gif'
+            if not os.path.exists(path):
+                os.mkdir(path)
+
+        with imageio.get_writer(os.getcwd() + '/gif/' + 'fill.gif', mode = 'I') as writer:
+            while totalConc < eps:
+                if gif:
+                    plotter.plotConcentration(self, time, path = path + '/t_' + str.format('%.2f' %(time)) + '.png')
+                    image = imageio.imread(path + '/t_%.2f.png' %time)
+                    writer.append_data(image)
+                    os.remove(path + '/t_%.2f.png' %time)
+                # Fill all the branches and SLs
+                self.fillStep(dt)
+                # Once all of the branches and SLs have been updated, we can move to the next iteration
+                # Update the time, total concentration, and swap the newFillList over to self.fillList
+                time += dt
+                totalConc = self.getTotalConcentration()
+                # On the new fillList, flip all of the update switches back to False
+                self.resetUpdateFlag()
+                # Save the time and totalConc
+                self.tList.append(time)
+                self.concentrationList.append(totalConc)
 
     def saveModel(self, path):
         # For the large SL models, the fillList takes up unnecessary when saving with pickle

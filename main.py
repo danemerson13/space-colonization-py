@@ -59,7 +59,6 @@ def createModel(pointPath, nSL):
 
     # Solve
     col1.solveRSL(Qin, Pin, Pout, n_iter=1000, tol=1e-6, verbosity=0, a=0, b=1e-4)
-
     col1.setSLVolume(375000) # Setting SL volume with bloodVol = 375 mL
 
     return col1
@@ -97,8 +96,8 @@ def auto():
             print("Model saved in ", end - start, " seconds.")
 
 def main():
-    i = 4   
-    n = 25
+    i = 0 
+    n = 10
 
     # Check that directory exists, if not make it
     # if not os.path.exists(os.getcwd() + '/trial/' + str(n) + 'SL'):
@@ -118,7 +117,7 @@ def main():
     end = time.time()
     print("Model created in ", end - start, " seconds.")
     start = time.time()
-    col.fillTree(dt = 0.1)
+    col.fillTree(dt = 0.1, gif = True)
     end = time.time()
     print("Filling algorithm took ", end- start, "seconds.")
     # Save the tree
@@ -132,5 +131,5 @@ def main():
     print("Model saved in ", end - start, " seconds.")
 
 if __name__ == "__main__":
-    # main()
-    auto()
+    main()
+    # auto()
