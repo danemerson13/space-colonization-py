@@ -433,7 +433,7 @@ class Colony:
         # Filling becomes progressively slow as we approach 100% hence the tolerance
         # In paper we will use the notion of settling or rise time from first order systems (~98%),
         # but for the sake of robustness I will fill further so I dont need to rerun simulations
-        eps = 1-1e-3
+        eps = 1-1e-2
 
         # Create the gif folder if it doesnt exist
         if gif:

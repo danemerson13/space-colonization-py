@@ -73,17 +73,17 @@ def auto():
         for i in range(10):
             print("%dSL%d" %(n, i))
             # Use richer point cloud for models with more SLs
-            if n <= 100:
-                path = 'data/Point Clouds/10k Clouds/liverSample' + str(i) + '.npy'
-            else:
-                path = 'data/Point Clouds/100k Clouds/liverSample' + str(i) + '.npy'
+            # if n <= 100:
+            #     path = 'data/Point Clouds/10k Clouds/liverSample' + str(i) + '.npy'
+            # else:
+            path = 'data/Point Clouds/100k Clouds/liverSample' + str(i) + '.npy'
             # Create the model, simulate filling, save
             start = time.time()
             col = createModel(path, nSL = n)
             end = time.time()
             print("Model created in ", end - start, " seconds.")
             start = time.time()
-            col.fillTree(dt = 0.2)
+            col.fillTree(dt = 0.1)
             end = time.time()
             print("Tree filled in ", end - start, " seconds.")
             start = time.time()
@@ -97,7 +97,7 @@ def auto():
 
 def main():
     i = 0 
-    n = 10
+    n = 250
 
     # Check that directory exists, if not make it
     # if not os.path.exists(os.getcwd() + '/trial/' + str(n) + 'SL'):
@@ -117,7 +117,7 @@ def main():
     end = time.time()
     print("Model created in ", end - start, " seconds.")
     start = time.time()
-    col.fillTree(dt = 0.1, gif = True)
+    col.fillTree(dt = 0.2, gif = True)
     end = time.time()
     print("Filling algorithm took ", end- start, "seconds.")
     # Save the tree
@@ -131,5 +131,5 @@ def main():
     print("Model saved in ", end - start, " seconds.")
 
 if __name__ == "__main__":
-    main()
-    # auto()
+    # main()
+    auto()

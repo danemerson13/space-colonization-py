@@ -29,7 +29,7 @@ def plotConcentration(col, time = None, path = None):
                 ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', lw = rad, color = color)
         else: # isinstance(obj, superlobule.SuperLobule)
             loc = obj.getLocation()
-            ax.plot3D(loc[0],loc[1],loc[2],'o', ms = 10, color = color)
+            ax.plot3D(loc[0],loc[1],loc[2],'o', ms = 2, color = color)
 
     bound_mesh(ax, mesh)
     ax.view_init(elev = -180., azim = -90.)
@@ -37,7 +37,7 @@ def plotConcentration(col, time = None, path = None):
     ax.text(25,0,175,"Time: %.2f s" %(time))
     ax.set_axis_off()
     if path:
-        plt.savefig(path, bbox_inches = 'tight', dpi = 200)
+        plt.savefig(path, bbox_inches = 'tight', dpi = 100)
         plt.close()
     else:
         plt.show()
@@ -202,7 +202,7 @@ def getBranchCoords(branch):
 
 def getLiverSTL():
     # Load the STL files and add the vectors to the plot
-    mesh = np_mesh.Mesh.from_file(os.getcwd() + '/data/Models/liver159.stl')
+    mesh = np_mesh.Mesh.from_file(os.path.abspath(os.path.join(os.getcwd(), '..'))+ '/data/Models/liver159.stl')
     liver = mplot3d.art3d.Poly3DCollection(mesh.vectors)
     liver.set_alpha(0.05)
     liver.set_facecolor([0.5, 0.5, 0.5, 0.20])
