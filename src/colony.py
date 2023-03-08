@@ -441,24 +441,39 @@ class Colony:
             if not os.path.exists(path):
                 os.mkdir(path)
 
-        with imageio.get_writer(os.getcwd() + '/gif/' + 'fill.gif', mode = 'I') as writer:
-            while totalConc < eps:
-                if gif:
-                    plotter.plotConcentration(self, time, path = path + '/t_' + str.format('%.2f' %(time)) + '.png')
-                    image = imageio.imread(path + '/t_%.2f.png' %time)
-                    writer.append_data(image)
-                    os.remove(path + '/t_%.2f.png' %time)
-                # Fill all the branches and SLs
-                self.fillStep(dt)
-                # Once all of the branches and SLs have been updated, we can move to the next iteration
-                # Update the time, total concentration, and swap the newFillList over to self.fillList
-                time += dt
-                totalConc = self.getTotalConcentration()
-                # On the new fillList, flip all of the update switches back to False
-                self.resetUpdateFlag()
-                # Save the time and totalConc
-                self.tList.append(time)
-                self.concentrationList.append(totalConc)
+        if gif:
+            with imageio.get_writer(os.getcwd() + '/gif/' + 'fill.gif', mode = 'I') as writer:
+                while totalConc < eps:
+                    if gif:
+                        plotter.plotConcentration(self, time, path = path + '/t_' + str.format('%.2f' %(time)) + '.png')
+                        image = imageio.imread(path + '/t_%.2f.png' %time)
+                        writer.append_data(image)
+                        os.remove(path + '/t_%.2f.png' %time)
+                    # Fill all the branches and SLs
+                    self.fillStep(dt)
+                    # Once all of the branches and SLs have been updated, we can move to the next iteration
+                    # Update the time, total concentration, and swap the newFillList over to self.fillList
+                    time += dt
+                    totalConc = self.getTotalConcentration()
+                    # On the new fillList, flip all of the update switches back to False
+                    self.resetUpdateFlag()
+                    # Save the time and totalConc
+                    self.tList.append(time)
+                    self.concentrationList.append(totalConc)
+        else:
+             while totalConc < eps:
+                    # Fill all the branches and SLs
+                    self.fillStep(dt)
+                    # Once all of the branches and SLs have been updated, we can move to the next iteration
+                    # Update the time, total concentration, and swap the newFillList over to self.fillList
+                    time += dt
+                    totalConc = self.getTotalConcentration()
+                    # On the new fillList, flip all of the update switches back to False
+                    self.resetUpdateFlag()
+                    # Save the time and totalConc
+                    self.tList.append(time)
+                    self.concentrationList.append(totalConc)
+        
 
     def saveModel(self, path):
         # For the large SL models, the fillList takes up unnecessary when saving with pickle

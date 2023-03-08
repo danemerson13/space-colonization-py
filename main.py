@@ -83,7 +83,7 @@ def auto():
             end = time.time()
             print("Model created in ", end - start, " seconds.")
             start = time.time()
-            col.fillTree(dt = 0.1)
+            col.fillTree(dt = 0.1, gif = False)
             end = time.time()
             print("Tree filled in ", end - start, " seconds.")
             start = time.time()
