@@ -79,5 +79,5 @@ def automatic(samples, npts):
         print("It took ", end-start, " seconds to sample and check the points for point cloud #", i, ". ", len(pts), " points are in the cloud.")
 
 if __name__ == "__main__":
-    main()
-    # automatic(10,10000)
+    # main()
+    automatic(1,100000)
