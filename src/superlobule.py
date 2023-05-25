@@ -18,6 +18,7 @@ class SuperLobule:
         self.flowrate = None
         self.volume = vol
         self.concentration = 0
+        self.concentrationList = list(0)
         self.updateFlag = None
 
     def getLocation(self):
@@ -62,6 +63,8 @@ class SuperLobule:
             self.concentration = (Cin * Vin + (Vol - Vin) * self.getConcentration())/Vol
         else:
             self.concentration = Cin
+        # Append to concentrationList
+        self.concentrationList.append(self.concentration)
         self.setUpdateFlag(True)
 
     def setUpdateFlag(self, val):
