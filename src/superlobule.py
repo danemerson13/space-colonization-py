@@ -18,7 +18,7 @@ class SuperLobule:
         self.flowrate = None
         self.volume = vol
         self.concentration = 0
-        self.concentrationList = list(0)
+        self.concentrationList = list([self.concentration])
         self.updateFlag = None
 
     def getLocation(self):

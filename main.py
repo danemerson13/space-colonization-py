@@ -97,7 +97,7 @@ def auto():
 
 def main():
     i = 0 
-    n = 250
+    n = 25
 
     # Check that directory exists, if not make it
     # if not os.path.exists(os.getcwd() + '/trial/' + str(n) + 'SL'):

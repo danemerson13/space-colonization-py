@@ -29,7 +29,7 @@ def myKMeans(pts, n_clust):
     cluster_percent = 0.05
     # n_clust = 100
     n = pts.shape[0]
-    kmeans = KMeans(n_clusters = n_clust, max_iter = 1000, random_state = 0).fit(pts)
+    kmeans = KMeans(n_clusters = n_clust, max_iter = 1000, random_state = 0, n_init = 10).fit(pts)
     # kmeans = KMeans(n_clusters = int(pts.shape[0]//(n*cluster_percent)), max_iter = 1000, random_state = 0).fit(pts)
     return kmeans
 
