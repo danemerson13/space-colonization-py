@@ -10,6 +10,40 @@ sys.path.append('../../Space Colonization/')
 from src import superlobule, branch
 import os
 
+def labelSL(col, path = None):
+    # Create the figure
+    fig = plt.figure()
+    ax = mplot3d.Axes3D(fig)
+    liver, mesh = getLiverSTL()
+    ax.add_collection3d(liver)
+
+    # Plot Branches
+    for branch in col.branchList:
+        coords = getBranchCoords(branch)
+        if branch.getType() == 'Inlet':
+            color = 'red'
+        else:
+            color = 'blue'
+        rad = branch.getRadius()
+        for j in range(len(coords) - 1):
+            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', lw = rad, color = color)
+
+    # Plot SLs
+    for i, sl in enumerate(col.slList):
+        coords = sl.getLocation()
+        ax.scatter(coords[0], coords[1], coords[2], c = 'magenta', s = 60)
+        # ax.text(coords[0], coords[1], coords[2], str(i), fontsize = 10, zorder = 3)
+
+    bound_mesh(ax, mesh)
+    ax.view_init(elev = -180., azim = -90.)
+    ax.set_axis_off()
+    if path:
+        plt.savefig(path, dpi = 200)
+        plt.close()
+    else:
+        plt.show()
+
+
 def plotConcentration(col, time = None, path = None):
     # Create the figure
     fig = plt.figure()
