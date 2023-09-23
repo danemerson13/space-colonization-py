@@ -106,9 +106,10 @@ class Colony:
         # Function to construct and solve a linear system of equations based 
         # on an electrical analog model of fluid flow through the model (explained in detail below).
         # -----
-        # Convert Pressure from mmHg to dyn/mm^2
-        Pin = Pin * 13.3322
-        Pout = Pout * 13.3322
+        ## SINCE THIS FUNCTION IS CALLED FROM WITHIN SolveRSL ASSUME Pin ALREADY IN UNITS OF dyn/mm^2
+        # # Convert Pressure from mmHg to dyn/mm^2
+        # Pin = Pin * 13.3322
+        # Pout = Pout * 13.3322
 
         # Build square A matrix to solve linear system Ax = b
         # x is the all of the branchwise flow rates and nodal pressures, concatenated into one vector
@@ -240,40 +241,23 @@ class Colony:
             Qb, _ = self.queryQin(b, Pin, Pout)
         if verbosity >= 2:
             print("Starting bisection method with initial bounds {%d, %d}" %(a, b))
+        if verbosity >= 4:
+            print("Starting Pin = %.2f mmHg" %(self.nodeList[0].getPressure()/13.3322))
 
         # Save the Req for RSL = 0
         Req = (Pin - Pout)/Qa
 
         # Now iterate until tolerance is met or n_iter is broken
-        # t_list = list()
-        # c = (a+b)/2
-        # Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
-        # iter = 0
-        # while np.abs((Qactual - Qc)/Qactual) > tol and iter < n_iter:
-        #     if verbosity >= 3:
-        #         print("Iter: %d, RSL = %.2f, Tolerance: %.2E" %(iter, c, np.abs(Qactual - Qc)/Qactual))
-        #     # Bisection Method logic
-        #     if (Qa - Qactual) * (Qc - Qactual) < 0:
-        #         b = c
-        #         Qb = Qc
-        #     else:
-        #         a = c
-        #         Qa = Qc
-        #     # Update c
-        #     c = (a+b)/2
-        #     Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
-        #     # Update counter
-        #     iter += 1
-
-        # Iterate with regula falsi
         t_list = list()
-        c = ((Qa-Qactual)*b - (Qb-Qactual)*a)/(Qa - Qb)
+        c = (a+b)/2
         Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
         iter = 0
         while np.abs((Qactual - Qc)/Qactual) > tol and iter < n_iter:
             if verbosity >= 3:
                 print("Iter: %d, RSL = %.2f, Tolerance: %.2E" %(iter, c, np.abs(Qactual - Qc)/Qactual))
-            # Regula Falsi Method logic
+            if verbosity >= 4:
+                print("Pin = %.2f mmHg" %(self.nodeList[0].getPressure()/13.3322))
+            # Bisection Method logic
             if (Qa - Qactual) * (Qc - Qactual) < 0:
                 b = c
                 Qb = Qc
@@ -281,10 +265,31 @@ class Colony:
                 a = c
                 Qa = Qc
             # Update c
-            c = ((Qa-Qactual)*b - (Qb-Qactual)*a)/(Qa - Qb)
+            c = (a+b)/2
             Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
             # Update counter
             iter += 1
+
+        # Iterate with regula falsi
+        # t_list = list()
+        # c = ((Qa-Qactual)*b - (Qb-Qactual)*a)/(Qa - Qb)
+        # Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
+        # iter = 0
+        # while np.abs((Qactual - Qc)/Qactual) > tol and iter < n_iter:
+        #     if verbosity >= 3:
+        #         print("Iter: %d, RSL = %.2f, Tolerance: %.2E" %(iter, c, np.abs(Qactual - Qc)/Qactual))
+        #     # Regula Falsi Method logic
+        #     if (Qa - Qactual) * (Qc - Qactual) < 0:
+        #         b = c
+        #         Qb = Qc
+        #     else:
+        #         a = c
+        #         Qa = Qc
+        #     # Update c
+        #     c = ((Qa-Qactual)*b - (Qb-Qactual)*a)/(Qa - Qb)
+        #     Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
+        #     # Update counter
+        #     iter += 1
 
         end = time.time()
         elapsed = end - start
@@ -426,6 +431,9 @@ class Colony:
         # Initialize time and total concentration
         time = 0.
         totalConc = self.getTotalConcentration()
+        # Clear out the old arrays
+        self.tList = list()
+        self.concentrationList = list()
         # Save the time and concentration
         self.tList.append(time)
         self.concentrationList.append(totalConc)
@@ -472,8 +480,7 @@ class Colony:
                     self.resetUpdateFlag()
                     # Save the time and totalConc
                     self.tList.append(time)
-                    self.concentrationList.append(totalConc)
-        
+                    self.concentrationList.append(totalConc)   
 
     def saveModel(self, path):
         # For the large SL models, the fillList takes up unnecessary when saving with pickle
@@ -784,12 +791,22 @@ class Colony:
             R = (8 * mu * branch.getLength()) / (np.pi * branch.getRadius()**4)
             branch.setResistance(R)
 
+    def setWSS(self, mu):
+        # Convert mu from cP to Pa-s (Pa are standard for )
+        mu = mu * 0.001
+        # Flow rate (Q) units are mm^3/s
+        # Radius (r) units are mm
+        # Thus WSS is returned in Pa since tau = (4 * mu * Q)/(pi * r^3)
+        for branch in self.branchList:
+            tau = (8 * mu * branch.getFlowRate()) / (np.pi * branch.getRadius()**3)
+            branch.setWSS(tau)
+
     def setRSL(self, RSL):
         # Assigns a resistance value to all SLs
         for sl in self.slList:
             sl.setResistance(RSL)
 
-    def queryQin(self, Pin, Pout, RSL):
+    def queryQin(self, RSL, Pin, Pout):
         # Solves the resistance network for a given RSL value and returns the flow rate at the inlet
         # Note: this function rebuilds the coefficient matrix in our linear system and requires the solution
         # of Ax = b with each call, and can be computationally expensive for larger models
