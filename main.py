@@ -58,7 +58,7 @@ def createModel(pointPath, nSL):
     col1.mergeTrees(col2)
 
     # Solve
-    col1.solveRSL(Qin, Pin, Pout, n_iter=1000, tol=1e-6, verbosity=4, a=0, b=1e-4)
+    col1.solveRSL(Qin, Pin, Pout, n_iter=1000, tol=1e-6, verbosity=0, a=0, b=1e-4)
     col1.setSLVolume(375000) # Setting SL volume with bloodVol = 375 mL
 
     return col1
