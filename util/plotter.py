@@ -10,7 +10,7 @@ sys.path.append('../../Space Colonization/')
 from src import superlobule, branch
 import os
 
-def labelSL(col, path = None):
+def plotModel(col, slflag = False, path = None):
     # Create the figure
     fig = plt.figure()
     ax = mplot3d.Axes3D(fig)
@@ -29,10 +29,11 @@ def labelSL(col, path = None):
             ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', lw = rad, color = color)
 
     # Plot SLs
-    for i, sl in enumerate(col.slList):
-        coords = sl.getLocation()
-        ax.scatter(coords[0], coords[1], coords[2], c = 'magenta', s = 60)
-        # ax.text(coords[0], coords[1], coords[2], str(i), fontsize = 10, zorder = 3)
+    if slflag:
+        for i, sl in enumerate(col.slList):
+            coords = sl.getLocation()
+            ax.scatter(coords[0], coords[1], coords[2], c = 'magenta', s = 60)
+            # ax.text(coords[0], coords[1], coords[2], str(i), fontsize = 10, zorder = 3)
 
     bound_mesh(ax, mesh)
     ax.view_init(elev = -180., azim = -90.)
@@ -42,7 +43,6 @@ def labelSL(col, path = None):
         plt.close()
     else:
         plt.show()
-
 
 def plotConcentration(col, time = None, path = None):
     # Create the figure
@@ -100,6 +100,74 @@ def plotFlowRate(col, path = None):
     ax.view_init(elev = -180., azim = -90.)
     ax.set_axis_off()
     fig.colorbar(mymap,  label = 'Flow Rate (mL/min)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
+    if path:
+        plt.savefig(path, dpi = 200)
+        plt.close()
+    else:
+        plt.show()
+
+def plotPressure(col, path = None):
+    # Convert from dyn/mm^2 to mmHg with P/13.3322
+    fig = plt.figure()
+    ax = mplot3d.Axes3D(fig)
+    liver, mesh = getLiverSTL()
+    ax.add_collection3d(liver)
+
+    # Set up cmap
+    min, max = getPressureLims(col)
+    # Put pressure back in mmHg
+    min = min/13.3322; max = max/13.3322
+    cmap = matplotlib.cm.get_cmap('cool')
+    norm = matplotlib.colors.Normalize(vmin = min, vmax = max)
+    mymap = matplotlib.cm.ScalarMappable(norm = norm, cmap = cmap)
+
+    for branch in col.branchList:
+        coords = getBranchCoords(branch)
+        for j in range(len(coords) - 1):
+            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'k-')
+
+    for node in col.nodeList:
+        if node.getType() != "Interior":
+            nodeLoc = node.getLocation()
+            ax.plot3D(nodeLoc[0], nodeLoc[1], nodeLoc[2], 'o', color = mymap.to_rgba(node.getPressure()/13.3322)[:-1])
+
+    bound_mesh(ax, mesh)
+    ax.view_init(elev = -180., azim = -90.)
+    ax.set_axis_off()
+    fig.colorbar(mymap,  label = 'Pressure (mmHg)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
+
+    if path:
+        plt.savefig(path, dpi = 200)
+        plt.close()
+    else:
+        plt.show()
+
+def plotWSS(col, mu, path = None):
+    # First calculate the WSS values in each vessel
+    col.setWSS(mu)
+    # Create color mapping
+    taumin, taumax = getWSSLims(col)
+    cmap = matplotlib.cm.viridis
+    normalize = matplotlib.colors.Normalize(vmin = taumin, vmax = taumax)
+    mymap = matplotlib.cm.ScalarMappable(norm = normalize, cmap = cmap)
+
+    # Create the figure
+    fig = plt.figure()
+    ax = mplot3d.Axes3D(fig)
+    liver, mesh = getLiverSTL()
+    ax.add_collection3d(liver)
+
+    for branch in col.branchList:
+        coords = getBranchCoords(branch)
+        color = mymap.to_rgba(branch.getWSS())[:-1]
+        rad = branch.getRadius()
+        for j in range(len(coords) - 1):
+            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', lw = rad, color = color)
+
+    bound_mesh(ax, mesh)
+    ax.view_init(elev = -180., azim = -90.)
+    ax.set_axis_off()
+    fig.colorbar(mymap,  label = 'Wall Shear Stress (Pa)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
     if path:
         plt.savefig(path, dpi = 200)
         plt.close()
@@ -300,3 +368,26 @@ def getFlowRateLims(col):
         if flow < minFlow:
             minFlow = flow
     return minFlow, maxFlow
+
+def getWSSLims(col):
+    maxWSS = -np.inf
+    minWSS = np.inf
+    for branch in col.branchList:
+        WSS = branch.getWSS()
+        if WSS > maxWSS:
+            maxWSS = WSS
+        if WSS < minWSS:
+            minWSS = WSS
+    return minWSS, maxWSS
+
+def getPressureLims(col):
+    max = -np.inf
+    min = np.inf
+    for node in col.nodeList:
+        if node.getType() != "Interior":
+            PNode = node.getPressure()
+            if PNode > max:
+                max = PNode
+            if PNode < min:
+                min = PNode
+    return min, max

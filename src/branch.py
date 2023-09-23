@@ -29,6 +29,7 @@ class Branch:
         self.volume = None
         self.concentration = 0
         self.updateFlag = None
+        self.WSS = None
 
     def setProximal(self, prox):
         self.proximal = prox
@@ -113,6 +114,12 @@ class Branch:
         else:
             self.concentration = Cin
         self.setUpdateFlag(True)
+
+    def setWSS(self, tau):
+        self.WSS = tau
+
+    def getWSS(self):
+        return self.WSS
 
     def setUpdateFlag(self, val):
         self.updateFlag = val
