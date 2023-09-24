@@ -64,13 +64,13 @@ def createModel(pointPath, nSL):
     return col1
 
 def auto():
-    nSL = [5,10,25,50,100,250,500,1000,2000]
+    nSL = [1000,2000]
     sys.setrecursionlimit(10**9)
     for n in nSL:
         # Check that directory exists, if not make it
         if not os.path.exists(os.getcwd() + '/results/' + str(n) + 'SL'):
             os.mkdir(os.getcwd() + '/results/' + str(n) + 'SL')
-        for i in range(10):
+        for i in range(1,10):
             print("%dSL%d" %(n, i))
             # Use richer point cloud for models with more SLs
             if n <= 100:
