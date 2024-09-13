@@ -25,6 +25,7 @@ class Colony:
         self.tSpaceCol = None
         self.tMatrixSolve = None
         self.tRSLSolve = None
+        self.tFillSolve = None
 
 ##### HIGH LEVEL FUNCTIONS #####
 
