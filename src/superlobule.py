@@ -56,14 +56,16 @@ class SuperLobule:
 
     def getConcentration(self):
         return self.concentration
+    
+    def setConcentration(self, C):
+        self.concentration = C
 
     def updateConcentration(self, Cin, Vin):
         Vol = self.getVolume()
         if Vin < Vol:
-            self.concentration = (Cin * Vin + (Vol - Vin) * self.getConcentration())/Vol
+            self.setConcentration((Cin * Vin + (Vol - Vin) * self.getConcentration())/Vol)
         else:
-            self.concentration = Cin
-        # Append to concentrationList
+            self.setConcentration(Cin)
         self.concentrationList.append(self.concentration)
         self.setUpdateFlag(True)
 

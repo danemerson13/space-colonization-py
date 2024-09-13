@@ -1,3 +1,5 @@
+import numpy as np
+
 class Branch:
     # Properties of a branch
     # proximal: type = Node
@@ -30,6 +32,9 @@ class Branch:
         self.concentration = 0
         self.updateFlag = None
         self.WSS = None
+        self.generation = 0
+
+        self.axis = (prox.getLocation() - dist.getLocation())/np.linalg.norm((prox.getLocation() - dist.getLocation()))
 
     def setProximal(self, prox):
         self.proximal = prox
@@ -106,13 +111,16 @@ class Branch:
     
     def getConcentration(self):
         return self.concentration
+    
+    def setConcentration(self, C):
+        self.concentration = C
 
     def updateConcentration(self, Cin, Vin):
         Vol = self.getVolume()
         if Vin < Vol:
-            self.concentration = (Cin * Vin + (Vol - Vin) * self.getConcentration())/Vol
+            self.setConcentration((Cin * Vin + (Vol - Vin) * self.getConcentration())/Vol)
         else:
-            self.concentration = Cin
+            self.setConcentration(Cin)
         self.setUpdateFlag(True)
 
     def setWSS(self, tau):
@@ -126,6 +134,15 @@ class Branch:
 
     def isUpdated(self):
         return self.updateFlag
+    
+    def getGeneration(self):
+        return self.generation
+    
+    def setGeneration(self, gen):
+        self.generation = gen
+
+    def getAxis(self):
+        return self.axis
 
 ##### UTILITY FUNCTIONS #####
 

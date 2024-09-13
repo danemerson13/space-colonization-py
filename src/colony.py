@@ -106,7 +106,7 @@ class Colony:
         # Function to construct and solve a linear system of equations based 
         # on an electrical analog model of fluid flow through the model (explained in detail below).
         # -----
-        ## SINCE THIS FUNCTION IS CALLED FROM WITHIN SolveRSL ASSUME Pin ALREADY IN UNITS OF dyn/mm^2
+        ## SINCE THIS FUNCTION IS CALLED FROM WITHIN SolveRSL() ASSUME Pin ALREADY IN UNITS OF dyn/mm^2
         # # Convert Pressure from mmHg to dyn/mm^2
         # Pin = Pin * 13.3322
         # Pout = Pout * 13.3322
@@ -115,7 +115,7 @@ class Colony:
         # x is the all of the branchwise flow rates and nodal pressures, concatenated into one vector
         # A will be comprised of three types of equations
         # (1) Branch eqns: Vdist - Vprox - IR = 0 (Ohms law)
-        # (2) Nodal eqns: Iin - sum(Iout) = 0 (Kirchoffs current law)
+        # (2) Nodal eqns: sum(Iin) - sum(Iout) = 0 (Kirchoffs current law)
         # (3) BC eqns: V = const (Direct assignment)
 
         # Need to assign boundary conditions and count number of nodes, BCs
@@ -425,7 +425,7 @@ class Colony:
         # Update the fillList to our newly ordered fillList (this is only really important after the first iteration)
         self.fillList = newFillList
 
-    def fillTree(self, dt, gif = False):
+    def fillTree(self, dt, tStop, gif = False):
         # Create the first fillList
         self.fillList += self.branchList + self.slList
         # Initialize time and total concentration
@@ -451,7 +451,7 @@ class Colony:
 
         if gif:
             with imageio.get_writer(os.getcwd() + '/gif/' + 'fill.gif', mode = 'I') as writer:
-                while totalConc < eps:
+                while time < tStop:
                     if gif:
                         plotter.plotConcentration(self, time, path = path + '/t_' + str.format('%.2f' %(time)) + '.png')
                         image = imageio.imread(path + '/t_%.2f.png' %time)
@@ -469,7 +469,7 @@ class Colony:
                     self.tList.append(time)
                     self.concentrationList.append(totalConc)
         else:
-             while totalConc < eps:
+             while time < tStop:
                     # Fill all the branches and SLs
                     self.fillStep(dt)
                     # Once all of the branches and SLs have been updated, we can move to the next iteration
@@ -483,7 +483,7 @@ class Colony:
                     self.concentrationList.append(totalConc)   
 
     def saveModel(self, path):
-        # For the large SL models, the fillList takes up unnecessary when saving with pickle
+        # For the large SL models, the fillList takes up unnecessary space when saving with pickle
         # Clear the fillList before saving
         self.fillList = list()
         # Save the completed Colony object to a pickle file in the specified path
@@ -756,7 +756,7 @@ class Colony:
             if not self.branchList[i].getParents():
                 raise RuntimeError('Non root branch has no parents')
             ratio = self.countTerminals(self.branchList[i])/self.countTerminals(self.branchList[i].getParents()[0])
-            self.branchList[i].setRadius(np.sqrt(ratio * self.branchList[i].getParents()[0].getRadius()**2))
+            self.branchList[i].setRadius(np.cbrt(ratio * self.branchList[i].getParents()[0].getRadius()**3))
 
     def setLength(self):
         # Assigns length to all branches in model
@@ -828,6 +828,13 @@ class Colony:
             if branch.getFlowRate() * dir < 0:
                 raise RuntimeError('Backflow: computed flows have inconsistent direction')
 
+    def genCheck(self):
+        for branch in self.branchList:
+            # If there are any unsassigned generations return True
+            if branch.getGeneration() == 0:
+                return True
+        # Otherwise return False
+        return False
 # Filling Specific
 
     def getTotalConcentration(self):
@@ -838,6 +845,10 @@ class Colony:
             vol += obj.getVolume()
             conc += obj.getVolume() * obj.getConcentration()
         return conc/vol
+    
+    def clearConcentrations(self):
+        for obj in self.fillList:
+            obj.setConcentration(0.0)
 
     def findRoot(self):
         # Locates the root branch in fillList
