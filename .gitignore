@@ -19,4 +19,7 @@ segmentOLD.py
 filling.gif
 gif/*
 misc/*
-results/dt02/*
+results/dt02/
+results/gridRun/
+results/pressureDebug/
+results/visDebug/
