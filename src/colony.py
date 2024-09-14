@@ -848,6 +848,9 @@ class Colony:
         return conc/vol
     
     def clearConcentrations(self):
+        # Check whether the fillList exists (it is cleared when saving models)
+        if not(self.fillList):
+            self.fillList += self.branchList + self.slList
         for obj in self.fillList:
             obj.setConcentration(0.0)
 
