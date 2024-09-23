@@ -25,4 +25,6 @@ results/pressureDebug/
 results/visDebug/
 results/nSLConvergence/
 results/PQGrid/
+results/tConvergence/
+results/tConvergenceFine/
 figures/
