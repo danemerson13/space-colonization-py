@@ -238,6 +238,8 @@ class Colony:
         a = a; Qa, _ = self.queryQin(a, Pin, Pout)
         b = b; Qb, _ = self.queryQin(b, Pin, Pout)
         while (Qa - Qactual) * (Qb - Qactual) >= 0:
+            if Qa < Qactual:
+                raise RuntimeError('Impossible boundary conditions: (Qactual, Pin, Pout) for given system. Q(RSL = 0) yields a flow rate lower than required flow rate. This is because the equivalent resistance of the explicitly modeled vessels does not permit enough flow rate through the system, therefore there does not exist a non-negative RSL value to satisfy the prescribed conditions.')
             b *= 10
             Qb, _ = self.queryQin(b, Pin, Pout)
         if verbosity >= 2:
@@ -271,7 +273,7 @@ class Colony:
             # Update counter
             iter += 1
 
-        # Iterate with regula falsi
+        # Iterate with regula falsi method
         # t_list = list()
         # c = ((Qa-Qactual)*b - (Qb-Qactual)*a)/(Qa - Qb)
         # Qc, t = self.queryQin(c, Pin, Pout); t_list.append(t)
@@ -430,13 +432,13 @@ class Colony:
         # Create the first fillList
         self.fillList += self.branchList + self.slList
         # Initialize time and total concentration
-        time = 0.
+        simTime = 0.
         totalConc = self.getTotalConcentration()
         # Clear out the old arrays
         self.tList = list()
         self.concentrationList = list()
         # Save the time and concentration
-        self.tList.append(time)
+        self.tList.append(simTime)
         self.concentrationList.append(totalConc)
         # Run until totalConc is within some epsilon of 100%
         # Filling becomes progressively slow as we approach 100% hence the tolerance
@@ -450,9 +452,11 @@ class Colony:
             if not os.path.exists(path):
                 os.mkdir(path)
 
+        start = time.time()
+
         if gif:
             with imageio.get_writer(os.getcwd() + '/gif/' + 'fill.gif', mode = 'I') as writer:
-                while time < tStop:
+                while simTime < tStop:
                     if gif:
                         plotter.plotConcentration(self, time, path = path + '/t_' + str.format('%.2f' %(time)) + '.png')
                         image = imageio.imread(path + '/t_%.2f.png' %time)
@@ -462,26 +466,29 @@ class Colony:
                     self.fillStep(dt)
                     # Once all of the branches and SLs have been updated, we can move to the next iteration
                     # Update the time, total concentration, and swap the newFillList over to self.fillList
-                    time += dt
+                    simTime += dt
                     totalConc = self.getTotalConcentration()
                     # On the new fillList, flip all of the update switches back to False
                     self.resetUpdateFlag()
                     # Save the time and totalConc
-                    self.tList.append(time)
+                    self.tList.append(simTime)
                     self.concentrationList.append(totalConc)
         else:
-             while time < tStop:
+             while simTime < tStop:
                     # Fill all the branches and SLs
                     self.fillStep(dt)
                     # Once all of the branches and SLs have been updated, we can move to the next iteration
                     # Update the time, total concentration, and swap the newFillList over to self.fillList
-                    time += dt
+                    simTime += dt
                     totalConc = self.getTotalConcentration()
                     # On the new fillList, flip all of the update switches back to False
                     self.resetUpdateFlag()
                     # Save the time and totalConc
-                    self.tList.append(time)
+                    self.tList.append(simTime)
                     self.concentrationList.append(totalConc)   
+
+        end = time.time()
+        self.tFillSolve = end - start
 
     def saveModel(self, path):
         # For the large SL models, the fillList takes up unnecessary space when saving with pickle
@@ -793,13 +800,13 @@ class Colony:
             branch.setResistance(R)
 
     def setWSS(self, mu):
-        # Convert mu from cP to Pa-s (Pa are standard for )
+        # Convert mu from cP to Pa-s (Pa are standard for WSS)
         mu = mu * 0.001
         # Flow rate (Q) units are mm^3/s
         # Radius (r) units are mm
         # Thus WSS is returned in Pa since tau = (4 * mu * Q)/(pi * r^3)
         for branch in self.branchList:
-            tau = (8 * mu * branch.getFlowRate()) / (np.pi * branch.getRadius()**3)
+            tau = (4 * mu * branch.getFlowRate()) / (np.pi * branch.getRadius()**3)
             branch.setWSS(tau)
 
     def setRSL(self, RSL):
@@ -853,6 +860,9 @@ class Colony:
             self.fillList += self.branchList + self.slList
         for obj in self.fillList:
             obj.setConcentration(0.0)
+            # Also need to clear SL concentrationLists
+            if type(obj) is superlobule.SuperLobule:
+                obj.concentrationList = []
 
     def findRoot(self):
         # Locates the root branch in fillList

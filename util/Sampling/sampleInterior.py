@@ -49,11 +49,11 @@ def checkPts(mesh,pts):
             mask[i] = True
     return pts[mask]
 
-def main(n):
+def main():
     path = '../../data/Models/liver159.stl'
     mesh = loadMesh(path)
     # visualizeMesh(mesh)
-    # n = 10000
+    n = 1000000
     print('Sampling ' + str(n) + ' points...')
     pts = samplePts(mesh,n)
     start = time.time()
@@ -80,5 +80,5 @@ def automatic(samples, npts):
         print("It took ", end-start, " seconds to sample and check the points for point cloud #", i, ". ", len(pts), " points are in the cloud.")
 
 if __name__ == "__main__":
-    # main()
-    automatic(5,100000)
+    main()
+    # automatic(5,100000)

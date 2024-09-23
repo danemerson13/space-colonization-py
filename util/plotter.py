@@ -3,6 +3,7 @@ import numpy as np
 import copy
 import matplotlib
 import matplotlib.pyplot as plt
+plt.rcParams['figure.dpi'] = 300
 from stl import mesh as np_mesh
 from mpl_toolkits import mplot3d
 import sys
@@ -147,7 +148,7 @@ def plotWSS(col, mu, path = None):
     col.setWSS(mu)
     # Create color mapping
     taumin, taumax = getWSSLims(col)
-    cmap = matplotlib.cm.viridis
+    cmap = matplotlib.cm.plasma
     normalize = matplotlib.colors.Normalize(vmin = taumin, vmax = taumax)
     mymap = matplotlib.cm.ScalarMappable(norm = normalize, cmap = cmap)
 

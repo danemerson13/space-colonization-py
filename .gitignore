@@ -23,3 +23,6 @@ results/dt02/
 results/gridRun/
 results/pressureDebug/
 results/visDebug/
+results/nSLConvergence/
+results/PQGrid/
+figures/
