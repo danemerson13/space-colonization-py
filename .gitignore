@@ -1,6 +1,10 @@
 # MacOS generated files
 .DS_Store
 
+# Virtual environment
+
+py31/
+
 # Python generated files
 __pycache__/
 
