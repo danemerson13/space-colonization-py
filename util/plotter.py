@@ -13,10 +13,14 @@ import os
 
 def plotModel(col, slflag = False, path = None):
     # Create the figure
-    fig = plt.figure()
-    ax = mplot3d.Axes3D(fig)
+    fig = plt.figure(dpi = 300)
+    ax = fig.add_subplot(111, projection='3d')
     liver, mesh = getLiverSTL()
-    ax.add_collection3d(liver)
+
+    # Plot the liver wireframe
+    for i in range(len(mesh.vectors)):
+        tri = mesh.vectors[i]
+        ax.plot3D(tri[:,0], tri[:,1], tri[:,2], color='gray', alpha=0.2, linewidth=0.5)
 
     # Plot Branches
     for branch in col.branchList:
@@ -87,7 +91,7 @@ def plotFlowRate(col, path = None):
     
     # Create the figure
     fig = plt.figure(dpi = 300)
-    ax = fig.gca(projection='3d')
+    ax = fig.add_subplot(111, projection='3d')
     liver, mesh = getLiverSTL()
 
     # Plot the liver wireframe
