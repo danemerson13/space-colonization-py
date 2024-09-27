@@ -80,29 +80,34 @@ def plotConcentration(col, time = None, path = None):
 def plotFlowRate(col, path = None):
     # Create color mapping, max note to convert flowRate from mm^3/s to mmHg/min by multiplying by 3/50
     fmin, fmax = getFlowRateLims(col)
-    cmap = matplotlib.cm.viridis
-    normalize = matplotlib.colors.Normalize(vmin = fmin*3/50, vmax = fmax*3/50)
+    cmap = matplotlib.cm.turbo
+    # normalize = matplotlib.colors.LogNorm(vmin = fmin*3/50, vmax = fmax*3/50)
+    normalize = matplotlib.colors.LogNorm(vmin = 5e-1, vmax = 1e3) # Bracketing the flow limits for manuscript figures
     mymap = matplotlib.cm.ScalarMappable(norm = normalize, cmap = cmap)
     
     # Create the figure
-    fig = plt.figure()
-    ax = mplot3d.Axes3D(fig)
+    fig = plt.figure(dpi = 300)
+    ax = fig.gca(projection='3d')
     liver, mesh = getLiverSTL()
-    ax.add_collection3d(liver)
+
+    # Plot the liver wireframe
+    for i in range(len(mesh.vectors)):
+        tri = mesh.vectors[i]
+        ax.plot3D(tri[:,0], tri[:,1], tri[:,2], color='gray', alpha=0.2, linewidth=0.5)
 
     for branch in col.branchList:
         coords = getBranchCoords(branch)
         color = mymap.to_rgba(branch.getFlowRate() * 3/50)[:-1]
         rad = branch.getRadius()
         for j in range(len(coords) - 1):
-            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', lw = rad, color = color)
+            ax.plot3D([coords[j][0],coords[j+1][0]],[coords[j][1],coords[j+1][1]],[coords[j][2],coords[j+1][2]],'-', lw = 0.5*rad, color = color)
 
     bound_mesh(ax, mesh)
     ax.view_init(elev = -180., azim = -90.)
     ax.set_axis_off()
     fig.colorbar(mymap,  label = 'Flow Rate (mL/min)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
     if path:
-        plt.savefig(path, dpi = 200)
+        plt.savefig(path, dpi = 600)
         plt.close()
     else:
         plt.show()
@@ -143,20 +148,30 @@ def plotPressure(col, path = None):
     else:
         plt.show()
 
-def plotWSS(col, mu, path = None):
+def plotWSS(col, mu, vmax = None, path = None):
     # First calculate the WSS values in each vessel
     col.setWSS(mu)
     # Create color mapping
-    taumin, taumax = getWSSLims(col)
-    cmap = matplotlib.cm.plasma
-    normalize = matplotlib.colors.Normalize(vmin = taumin, vmax = taumax)
+    if not(vmax):
+        _, vmax = getWSSLims(col)
+    cmap = matplotlib.cm.jet
+    normalize = matplotlib.colors.LogNorm(vmin = 0.01, vmax = 4)
     mymap = matplotlib.cm.ScalarMappable(norm = normalize, cmap = cmap)
 
     # Create the figure
-    fig = plt.figure()
-    ax = mplot3d.Axes3D(fig)
+    # fig = plt.figure(dpi = 300)
+    # ax = mplot3d.Axes3D(fig)
+    # liver, mesh = getLiverSTL()
+    # ax.add_collection3d(liver)
+
+    fig = plt.figure(dpi = 300)
+    ax = fig.gca(projection='3d')
     liver, mesh = getLiverSTL()
-    ax.add_collection3d(liver)
+
+    # Plot the liver wireframe
+    for i in range(len(mesh.vectors)):
+        tri = mesh.vectors[i]
+        ax.plot3D(tri[:,0], tri[:,1], tri[:,2], color='gray', alpha=0.2, linewidth=0.5)
 
     for branch in col.branchList:
         coords = getBranchCoords(branch)
@@ -169,6 +184,7 @@ def plotWSS(col, mu, path = None):
     ax.view_init(elev = -180., azim = -90.)
     ax.set_axis_off()
     fig.colorbar(mymap,  label = 'Wall Shear Stress (Pa)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
+    plt.tight_layout()
     if path:
         plt.savefig(path, dpi = 200)
         plt.close()
@@ -307,9 +323,9 @@ def getLiverSTL():
     # Load the STL files and add the vectors to the plot
     mesh = np_mesh.Mesh.from_file(os.path.abspath(os.path.join(os.getcwd(), '..'))+ '/data/Models/liver159.stl')
     liver = mplot3d.art3d.Poly3DCollection(mesh.vectors)
-    liver.set_alpha(0.05)
+    liver.set_alpha(0.2)
     liver.set_facecolor([0.5, 0.5, 0.5, 0.20])
-    liver.set_edgecolor([0., 0., 0., 0.20])
+    liver.set_edgecolor([0., 0., 0., 1])
 
     return liver, mesh
 
