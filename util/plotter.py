@@ -109,7 +109,7 @@ def plotFlowRate(col, path = None):
     bound_mesh(ax, mesh)
     ax.view_init(elev = -180., azim = -90.)
     ax.set_axis_off()
-    fig.colorbar(mymap,  label = 'Flow Rate (mL/min)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
+    fig.colorbar(mymap, ax = ax, label = 'Flow Rate (mL/min)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
     if path:
         plt.savefig(path, dpi = 600)
         plt.close()
@@ -144,7 +144,7 @@ def plotPressure(col, path = None):
     bound_mesh(ax, mesh)
     ax.view_init(elev = -180., azim = -90.)
     ax.set_axis_off()
-    fig.colorbar(mymap,  label = 'Pressure (mmHg)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
+    fig.colorbar(mymap, ax = ax, label = 'Pressure (mmHg)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
 
     if path:
         plt.savefig(path, dpi = 200)
@@ -169,7 +169,7 @@ def plotWSS(col, mu, vmax = None, path = None):
     # ax.add_collection3d(liver)
 
     fig = plt.figure(dpi = 300)
-    ax = fig.gca(projection='3d')
+    ax = fig.add_subplot(111, projection='3d')
     liver, mesh = getLiverSTL()
 
     # Plot the liver wireframe
@@ -187,7 +187,7 @@ def plotWSS(col, mu, vmax = None, path = None):
     bound_mesh(ax, mesh)
     ax.view_init(elev = -180., azim = -90.)
     ax.set_axis_off()
-    fig.colorbar(mymap,  label = 'Wall Shear Stress (Pa)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
+    fig.colorbar(mymap, ax = ax, label = 'Wall Shear Stress (Pa)', orientation = 'vertical', pad = -0.1, shrink = 0.5)
     plt.tight_layout()
     if path:
         plt.savefig(path, dpi = 200)
