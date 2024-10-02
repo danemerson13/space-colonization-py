@@ -1,0 +1,6 @@
+matplotlib
+numpy
+numpy-stl
+open3d
+ipykernel
+imageio
