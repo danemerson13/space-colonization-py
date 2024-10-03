@@ -1,4 +1,4 @@
-## Note: This readme file and documentation still needs some small updating (10/1/24), will be complete by EOD (10/3/24)
+## Note: This readme file and documentation still needs some small updating (10/1/24), will be complete by EOD (10/7/24)
 Additional results must be added, and some of the recently added code needs to be better commented. This readme file will also be improved prior to publication.
 
 ## Overview
