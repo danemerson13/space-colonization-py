@@ -1,6 +1,3 @@
-## Note: This readme file and documentation still needs some small updating (10/1/24), will be complete by EOD (10/7/24)
-Additional results must be added, and some of the recently added code needs to be better commented. This readme file will also be improved prior to publication.
-
 ## Overview
 This repository contains code to generate 3D vascular models of the human liver. Starting from an surface mesh (STL) of the liver, we utilize the space colonization algorithm to create a 3D model of the vasculature. We then simulate CPA loading/perfusion through the vasculature and investigate the effect of various pressure and flow rate boundary conditions.
 
